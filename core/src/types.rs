@@ -1,6 +1,6 @@
 //! Core types for mofaclaw
 
-use chrono::{Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -159,7 +159,12 @@ impl<'de> Deserialize<'de> for Message {
                                 "user" => Some(MessageRole::User),
                                 "assistant" => Some(MessageRole::Assistant),
                                 "tool" => Some(MessageRole::Tool),
-                                _ => return Err(serde::de::Error::unknown_variant(&role_str, &["system", "user", "assistant", "tool"])),
+                                _ => {
+                                    return Err(serde::de::Error::unknown_variant(
+                                        &role_str,
+                                        &["system", "user", "assistant", "tool"],
+                                    ));
+                                }
                             };
                         }
                         "content" => {
@@ -167,7 +172,9 @@ impl<'de> Deserialize<'de> for Message {
                             content = if value.is_string() {
                                 Some(MessageContent::Text(value.as_str().unwrap().to_string()))
                             } else if value.is_array() {
-                                Some(MessageContent::Array(serde_json::from_value(value).unwrap()))
+                                Some(MessageContent::Array(
+                                    serde_json::from_value(value).unwrap(),
+                                ))
                             } else if value.is_null() {
                                 None
                             } else {
@@ -262,7 +269,11 @@ impl Message {
     }
 
     /// Create a new tool result message
-    pub fn tool(tool_call_id: impl Into<String>, name: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn tool(
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             role: MessageRole::Tool,
             content: Some(MessageContent::Text(content.into())),
@@ -298,7 +309,8 @@ impl Message {
         }
 
         if !self.tool_calls.is_empty() {
-            let tool_calls: Vec<serde_json::Value> = self.tool_calls
+            let tool_calls: Vec<serde_json::Value> = self
+                .tool_calls
                 .iter()
                 .map(|tc| {
                     serde_json::json!({

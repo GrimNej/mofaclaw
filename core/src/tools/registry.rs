@@ -4,10 +4,10 @@
 //! providing a simplified interface for managing tools.
 
 use crate::error::{Result, ToolError};
-use mofa_sdk::agent::{as_tool, SimpleTool, SimpleToolRegistry, ToolRegistry as MofaToolRegistry};
+use mofa_sdk::agent::{SimpleTool, SimpleToolRegistry, ToolRegistry as MofaToolRegistry, as_tool};
 use mofa_sdk::kernel::{AgentContext, Tool, ToolInput};
 use mofa_sdk::llm::Tool as MofaTool;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 /// This registry is a thin wrapper around mofa-foundation's SimpleToolRegistry,
 /// providing backwards compatibility with existing mofaclaw code.
 ///
-/// It also implements mofa_foundation's ToolExecutor trait for use with AgentLoop.
+/// It also implements mofa's unified ToolExecutor trait for use with LLM tool calling.
 pub struct ToolRegistry {
     inner: SimpleToolRegistry,
 }
@@ -58,16 +58,19 @@ impl ToolRegistry {
 
     /// Get all tool definitions in OpenAI format
     pub fn get_definitions(&self) -> Vec<Value> {
-        MofaToolRegistry::list(&self.inner).iter().map(|t| {
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.parameters_schema
-                }
+        MofaToolRegistry::list(&self.inner)
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters_schema
+                    }
+                })
             })
-        }).collect()
+            .collect()
     }
 
     /// Execute a tool by name with given parameters (legacy API)
@@ -79,16 +82,17 @@ impl ToolRegistry {
         let input = ToolInput::from_json(serde_json::json!(params));
         let ctx = AgentContext::new(format!("tool-execution-{}", name));
 
-        let result = mofa_sdk::kernel::Tool::execute(
-            tool.as_ref(),
-            input,
-            &ctx
-        ).await;
+        let result = mofa_sdk::kernel::Tool::execute(tool.as_ref(), input, &ctx).await;
 
         if result.success {
             Ok(result.to_string_output())
         } else {
-            Err(ToolError::ExecutionFailed(format!("{}: {}", name, result.error.unwrap_or_default())).into())
+            Err(ToolError::ExecutionFailed(format!(
+                "{}: {}",
+                name,
+                result.error.unwrap_or_default()
+            ))
+            .into())
         }
     }
 
@@ -124,47 +128,35 @@ impl Default for ToolRegistry {
     }
 }
 
-/// Implement mofa_foundation's ToolExecutor trait for use with AgentLoop
+/// Implement unified mofa ToolExecutor trait for direct usage
 #[async_trait::async_trait]
-impl mofa_sdk::llm::agent_loop::ToolExecutor for ToolRegistry {
-    /// Execute a tool call
-    async fn execute(&self, name: &str, arguments: &str) -> anyhow::Result<String> {
+impl mofa_sdk::llm::ToolExecutor for ToolRegistry {
+    async fn execute(&self, name: &str, arguments: &str) -> mofa_sdk::llm::LLMResult<String> {
         // Parse arguments string to HashMap
-        let value: Value = serde_json::from_str(arguments)
-            .unwrap_or_else(|_| serde_json::json!({}));
+        let value: Value =
+            serde_json::from_str(arguments).unwrap_or_else(|_| serde_json::json!({}));
 
-        let params: HashMap<String, Value> = value.as_object()
+        let params: HashMap<String, Value> = value
+            .as_object()
             .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_else(HashMap::new);
 
-        self.execute(name, &params).await
-            .map_err(|e| anyhow::anyhow!("Tool execution failed: {}", e))
+        self.execute(name, &params)
+            .await
+            .map_err(|e| mofa_sdk::llm::LLMError::Other(format!("Tool execution failed: {}", e)))
     }
 
-    /// Get available tool definitions
-    fn available_tools(&self) -> Vec<MofaTool> {
-        MofaToolRegistry::list(&self.inner).iter().map(|t| {
-            // Parse the parameters schema - it's stored as a JSON string
-            let params_value: Value = if t.parameters_schema.is_string() {
-                serde_json::from_str(t.parameters_schema.as_str().unwrap_or("{}"))
-                    .unwrap_or_else(|_| json!({}))
-            } else {
-                t.parameters_schema.clone()
-            };
-            MofaTool::function(
-                &t.name,
-                &t.description,
-                params_value,
-            )
-        }).collect()
+    async fn available_tools(&self) -> mofa_sdk::llm::LLMResult<Vec<MofaTool>> {
+        let tools = MofaToolRegistry::list(&self.inner)
+            .iter()
+            .map(|t| MofaTool::function(&t.name, &t.description, t.parameters_schema.clone()))
+            .collect();
+
+        Ok(tools)
     }
 }
 
-/// Wrapper for Arc<RwLock<ToolRegistry>> that implements both ToolExecutor traits
-///
-/// This is needed because mofa has two ToolExecutor traits:
-/// - mofa_sdk::llm::ToolExecutor (for LLMAgentBuilder)
-/// - mofa_sdk::llm::agent_loop::ToolExecutor (for AgentLoop)
+/// Wrapper for Arc<RwLock<ToolRegistry>> that implements unified ToolExecutor
 pub struct ToolRegistryExecutor {
     inner: Arc<RwLock<ToolRegistry>>,
 }
@@ -175,52 +167,35 @@ impl ToolRegistryExecutor {
     }
 }
 
-// Implement mofa_sdk::llm::ToolExecutor for LLMAgentBuilder
+// Implement unified mofa_sdk::llm::ToolExecutor
 #[async_trait::async_trait]
 impl mofa_sdk::llm::ToolExecutor for ToolRegistryExecutor {
     async fn execute(&self, name: &str, arguments: &str) -> mofa_sdk::llm::LLMResult<String> {
         let registry = self.inner.read().await;
 
         // Parse arguments string to HashMap
-        let value: Value = serde_json::from_str(arguments)
-            .unwrap_or_else(|_| serde_json::json!({}));
+        let value: Value =
+            serde_json::from_str(arguments).unwrap_or_else(|_| serde_json::json!({}));
 
-        let params: HashMap<String, Value> = value.as_object()
+        let params: HashMap<String, Value> = value
+            .as_object()
             .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_else(HashMap::new);
 
-        registry.execute(name, &params).await
+        registry
+            .execute(name, &params)
+            .await
             .map_err(|e| mofa_sdk::llm::LLMError::Other(format!("Tool execution failed: {}", e)))
     }
 
-    fn available_tools(&self) -> Vec<MofaTool> {
-        // Note: This is a synchronous method, so we can't await here
-        // Return empty for now, tools will be registered directly
-        Vec::new()
-    }
-}
-
-// Implement mofa_sdk::llm::agent_loop::ToolExecutor for AgentLoop
-#[async_trait::async_trait]
-impl mofa_sdk::llm::agent_loop::ToolExecutor for ToolRegistryExecutor {
-    async fn execute(&self, name: &str, arguments: &str) -> anyhow::Result<String> {
+    async fn available_tools(&self) -> mofa_sdk::llm::LLMResult<Vec<MofaTool>> {
         let registry = self.inner.read().await;
 
-        // Parse arguments string to HashMap
-        let value: Value = serde_json::from_str(arguments)
-            .unwrap_or_else(|_| serde_json::json!({}));
+        let tools = MofaToolRegistry::list(registry.inner())
+            .iter()
+            .map(|t| MofaTool::function(&t.name, &t.description, t.parameters_schema.clone()))
+            .collect();
 
-        let params: HashMap<String, Value> = value.as_object()
-            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            .unwrap_or_else(HashMap::new);
-
-        registry.execute(name, &params).await
-            .map_err(|e| anyhow::anyhow!("Tool execution failed: {}", e))
-    }
-
-    fn available_tools(&self) -> Vec<MofaTool> {
-        // Note: This is a synchronous method, so we can't await here
-        // Return empty for now, tools will be registered directly
-        Vec::new()
+        Ok(tools)
     }
 }

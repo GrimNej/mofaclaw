@@ -108,7 +108,9 @@ impl TelegramChannel {
             .send_message(ChatId(chat_id), html_content)
             .parse_mode(ParseMode::Html)
             .await
-            .map_err(|e| MofaclawError::from(ChannelError::SendFailed(format!("Telegram error: {}", e))))?;
+            .map_err(|e| {
+                MofaclawError::from(ChannelError::SendFailed(format!("Telegram error: {}", e)))
+            })?;
 
         Ok(())
     }
@@ -123,7 +125,9 @@ impl TelegramChannel {
         transcription_provider: Option<&dyn TranscriptionProvider>,
     ) -> Result<()> {
         // Get the file
-        let file = bot.get_file(&info.file_id).await
+        let file = bot
+            .get_file(&info.file_id)
+            .await
             .map_err(|e| ChannelError::SendFailed(format!("Failed to get file: {}", e)))?;
 
         // Determine file extension
@@ -134,11 +138,13 @@ impl TelegramChannel {
         let file_path = media_dir.join(&file_name);
 
         // Create the file for writing
-        let mut file_handle = tokio::fs::File::create(&file_path).await
+        let mut file_handle = tokio::fs::File::create(&file_path)
+            .await
             .map_err(|e| ChannelError::SendFailed(format!("Failed to create file: {}", e)))?;
 
         // Download the file directly to disk
-        bot.download_file(&file.path, &mut file_handle).await
+        bot.download_file(&file.path, &mut file_handle)
+            .await
             .map_err(|e| ChannelError::SendFailed(format!("Failed to download file: {}", e)))?;
 
         let file_path_str = file_path.to_string_lossy().to_string();
@@ -154,11 +160,19 @@ impl TelegramChannel {
                             content_parts.push(format!("[transcription: {}]", transcription));
                         }
                         _ => {
-                            content_parts.push(format!("[{}: {}]", info.media_type.as_str(), file_path_str));
+                            content_parts.push(format!(
+                                "[{}: {}]",
+                                info.media_type.as_str(),
+                                file_path_str
+                            ));
                         }
                     }
                 } else {
-                    content_parts.push(format!("[{}: {}]", info.media_type.as_str(), file_path_str));
+                    content_parts.push(format!(
+                        "[{}: {}]",
+                        info.media_type.as_str(),
+                        file_path_str
+                    ));
                 }
             }
             _ => {
@@ -166,7 +180,11 @@ impl TelegramChannel {
             }
         }
 
-        debug!("Downloaded {} to {}", info.media_type.as_str(), file_path_str);
+        debug!(
+            "Downloaded {} to {}",
+            info.media_type.as_str(),
+            file_path_str
+        );
         Ok(())
     }
 
@@ -235,7 +253,7 @@ impl Channel for TelegramChannel {
         let bus = self.bus.clone();
         let transcription_provider = self.transcription_provider.clone();
         let media_dir = self.media_dir.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
 
         info!("Starting Telegram bot");
 
@@ -243,11 +261,11 @@ impl Channel for TelegramChannel {
         tokio::fs::create_dir_all(&media_dir).await?;
 
         // Clone for the move
-        let bot_clone = Arc::clone(&bot);
+        let _bot_clone = Arc::clone(&bot);
 
         // Set up message handler - using teloxide's Dispatcher
-        let handler = move |msg: Message, bot: Arc<Bot>| async move {
-            if let Some(user) = msg.from() {
+        let _handler = move |msg: Message, bot: Arc<Bot>| async move {
+            if let Some(user) = msg.from.as_ref() {
                 debug!("Telegram message from {:?}", user.id.0);
 
                 // Convert to InboundMessage
@@ -272,27 +290,35 @@ impl Channel for TelegramChannel {
                 }
 
                 // Handle media files - use methods to access optional fields
-                let media_file = msg.photo().and_then(|p| p.last())
+                let media_file = msg
+                    .photo()
+                    .and_then(|p| p.last())
                     .map(|ph| MediaInfo {
                         file_id: ph.file.id.clone(),
                         media_type: MediaType::Photo,
                         mime_type: Some("image/jpeg".to_string()),
                     })
-                    .or_else(|| msg.voice().map(|v| MediaInfo {
-                        file_id: v.file.id.clone(),
-                        media_type: MediaType::Voice,
-                        mime_type: v.mime_type.as_ref().map(|m| m.to_string()),
-                    }))
-                    .or_else(|| msg.audio().map(|a| MediaInfo {
-                        file_id: a.file.id.clone(),
-                        media_type: MediaType::Audio,
-                        mime_type: a.mime_type.as_ref().map(|m| m.to_string()),
-                    }))
-                    .or_else(|| msg.document().map(|d| MediaInfo {
-                        file_id: d.file.id.clone(),
-                        media_type: MediaType::Document,
-                        mime_type: d.mime_type.as_ref().map(|m| m.to_string()),
-                    }));
+                    .or_else(|| {
+                        msg.voice().map(|v| MediaInfo {
+                            file_id: v.file.id.clone(),
+                            media_type: MediaType::Voice,
+                            mime_type: v.mime_type.as_ref().map(|m| m.to_string()),
+                        })
+                    })
+                    .or_else(|| {
+                        msg.audio().map(|a| MediaInfo {
+                            file_id: a.file.id.clone(),
+                            media_type: MediaType::Audio,
+                            mime_type: a.mime_type.as_ref().map(|m| m.to_string()),
+                        })
+                    })
+                    .or_else(|| {
+                        msg.document().map(|d| MediaInfo {
+                            file_id: d.file.id.clone(),
+                            media_type: MediaType::Document,
+                            mime_type: d.mime_type.as_ref().map(|m| m.to_string()),
+                        })
+                    });
 
                 // Download media if present
                 if let Some(info) = media_file {
@@ -303,9 +329,12 @@ impl Channel for TelegramChannel {
                         &mut content_parts,
                         &mut media_paths,
                         transcription_provider.as_deref(),
-                    ).await {
+                    )
+                    .await
+                    {
                         warn!("Failed to download media: {}", e);
-                        content_parts.push(format!("[{}: download failed]", info.media_type.as_str()));
+                        content_parts
+                            .push(format!("[{}: download failed]", info.media_type.as_str()));
                     }
                 }
 
@@ -318,12 +347,8 @@ impl Channel for TelegramChannel {
                 debug!("Telegram message from {}: {}", sender_id, content);
 
                 // Publish to message bus
-                let inbound_msg = InboundMessage::new(
-                    "telegram",
-                    &sender_id,
-                    &chat_id,
-                    &content,
-                ).with_media(media_paths);
+                let inbound_msg = InboundMessage::new("telegram", &sender_id, &chat_id, &content)
+                    .with_media(media_paths);
 
                 if let Err(e) = bus.publish_inbound(inbound_msg).await {
                     error!("Failed to publish message to bus: {}", e);

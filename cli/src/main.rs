@@ -1,13 +1,14 @@
 //! Mofaclaw CLI - Command-line interface for the Mofaclaw AI assistant
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
 use console::Style;
+use mofa_sdk::{llm::LLMAgentBuilder, skills::SkillsManager};
 use mofaclaw_core::{
-    Config, ContextBuilder, MessageBus, SessionManager, AgentLoop,
-    ChannelManager, TelegramChannel, DingTalkChannel, FeishuChannel, load_config, save_config,
-    HeartbeatService, SubagentManager,
-    provider::{OpenAIProvider, OpenAIConfig},
+    AgentLoop, ChannelManager, Config, ContextBuilder, DingTalkChannel, FeishuChannel,
+    HeartbeatService, MessageBus, SessionManager, SubagentManager, TelegramChannel, load_config,
+    provider::{OpenAIConfig, OpenAIProvider},
+    save_config,
     tools::{ToolRegistry, ToolRegistryExecutor},
 };
 use std::io::Write;
@@ -15,8 +16,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mofa_sdk::{skills::SkillsManager, llm::LLMAgentBuilder, agent::ToolRegistry as MofaToolRegistry};
-use tracing::{Level};
+use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
 const MOFA_LOGO: &str = r#"
@@ -228,7 +228,11 @@ async fn command_onboard() -> Result<()> {
     // Create default files
     create_workspace_templates(&workspace).await?;
 
-    println!("\n{}{} mofaclaw is ready!", MOFA_LOGO, green.apply_to(">>>"));
+    println!(
+        "\n{}{} mofaclaw is ready!",
+        MOFA_LOGO,
+        green.apply_to(">>>")
+    );
     println!("\nNext steps:");
     println!("  1. Add your API key to ~/.mofaclaw/config.json");
     println!("     Get one at: https://openrouter.ai/keys");
@@ -243,15 +247,15 @@ async fn command_gateway(port: u16, verbose: bool) -> Result<()> {
     let filter = if verbose {
         EnvFilter::builder().parse("debug")?
     } else {
-        EnvFilter::from_default_env()
-            .add_directive(Level::INFO.into())
+        EnvFilter::from_default_env().add_directive(Level::INFO.into())
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    println!("{} Starting mofaclaw gateway on port {}...", MOFA_LOGO, port);
+    println!(
+        "{} Starting mofaclaw gateway on port {}...",
+        MOFA_LOGO, port
+    );
 
     let config = load_config().await?;
 
@@ -294,30 +298,11 @@ async fn command_gateway(port: u16, verbose: bool) -> Result<()> {
     // Register default tools
     {
         let mut tools_guard = tools.write().await;
-        AgentLoop::register_default_tools(
-            &mut tools_guard,
-            &workspace,
-            brave_api_key,
-            bus.clone(),
-        );
+        AgentLoop::register_default_tools(&mut tools_guard, &workspace, brave_api_key, bus.clone());
     }
 
     // Create ToolRegistryExecutor for LLMAgentBuilder
     let tool_executor = Arc::new(ToolRegistryExecutor::new(tools.clone()));
-
-    // Get tool definitions for LLMAgentBuilder
-    let tool_definitions: Vec<mofa_sdk::llm::Tool> = {
-        let tools_guard = tools.read().await;
-        MofaToolRegistry::list(tools_guard.inner()).iter().map(|t| {
-            let params_value: serde_json::Value = if t.parameters_schema.is_string() {
-                serde_json::from_str(t.parameters_schema.as_str().unwrap_or("{}"))
-                    .unwrap_or_else(|_| serde_json::json!({}))
-            } else {
-                t.parameters_schema.clone()
-            };
-            mofa_sdk::llm::Tool::function(&t.name, &t.description, params_value)
-        }).collect()
-    };
 
     // Build system prompt
     let system_prompt = context.build_system_prompt(None).await.unwrap_or_else(|_| {
@@ -331,20 +316,23 @@ async fn command_gateway(port: u16, verbose: bool) -> Result<()> {
             .with_name("Mofaclaw Gateway Agent")
             .with_provider(mofa_provider.clone())
             .with_system_prompt(system_prompt)
-            .with_tools(tool_definitions)
             .with_tool_executor(tool_executor)
-            .build()
+            .build_async()
+            .await,
     );
 
     // Create AgentLoop with the pre-built agent AND tools
-    let agent = Arc::new(AgentLoop::with_agent_and_tools(
-        &config,
-        llm_agent,
-        mofa_provider,
-        bus.clone(),
-        sessions.clone(),
-        tools.clone(),
-    ).await?);
+    let agent = Arc::new(
+        AgentLoop::with_agent_and_tools(
+            &config,
+            llm_agent,
+            mofa_provider,
+            bus.clone(),
+            sessions.clone(),
+            tools.clone(),
+        )
+        .await?,
+    );
 
     // Create subagent manager from agent loop
     let subagent_manager = std::sync::Arc::new(SubagentManager::new(agent.clone()));
@@ -394,11 +382,10 @@ async fn command_gateway(port: u16, verbose: bool) -> Result<()> {
     let heartbeat = HeartbeatService::new(
         workspace.clone(),
         30 * 60, // 30 minutes
-    ).with_callback(Arc::new(move |prompt: String| {
+    )
+    .with_callback(Arc::new(move |prompt: String| {
         let agent = Arc::clone(&agent_for_heartbeat);
-        Box::pin(async move {
-            Ok(agent.process_direct(&prompt, "heartbeat").await?)
-        })
+        Box::pin(async move { Ok(agent.process_direct(&prompt, "heartbeat").await?) })
     }));
 
     println!("✅ Heartbeat: every 30m");
@@ -463,30 +450,11 @@ async fn command_agent(message: Option<String>, session: String) -> Result<()> {
     // Register default tools
     {
         let mut tools_guard = tools.write().await;
-        AgentLoop::register_default_tools(
-            &mut tools_guard,
-            &workspace,
-            brave_api_key,
-            bus.clone(),
-        );
+        AgentLoop::register_default_tools(&mut tools_guard, &workspace, brave_api_key, bus.clone());
     }
 
     // Create ToolRegistryExecutor for LLMAgentBuilder
     let tool_executor = Arc::new(ToolRegistryExecutor::new(tools.clone()));
-
-    // Get tool definitions for LLMAgentBuilder
-    let tool_definitions: Vec<mofa_sdk::llm::Tool> = {
-        let tools_guard = tools.read().await;
-        MofaToolRegistry::list(tools_guard.inner()).iter().map(|t| {
-            let params_value: serde_json::Value = if t.parameters_schema.is_string() {
-                serde_json::from_str(t.parameters_schema.as_str().unwrap_or("{}"))
-                    .unwrap_or_else(|_| serde_json::json!({}))
-            } else {
-                t.parameters_schema.clone()
-            };
-            mofa_sdk::llm::Tool::function(&t.name, &t.description, params_value)
-        }).collect()
-    };
 
     // Build system prompt
     let system_prompt = context.build_system_prompt(None).await.unwrap_or_else(|_| {
@@ -500,20 +468,23 @@ async fn command_agent(message: Option<String>, session: String) -> Result<()> {
             .with_name("Mofaclaw CLI Agent")
             .with_provider(mofa_provider.clone())
             .with_system_prompt(system_prompt)
-            .with_tools(tool_definitions)
             .with_tool_executor(tool_executor)
-            .build()
+            .build_async()
+            .await,
     );
 
     // Create AgentLoop with the pre-built agent AND tools
-    let agent = Arc::new(AgentLoop::with_agent_and_tools(
-        &config,
-        llm_agent,
-        mofa_provider,
-        bus.clone(),
-        sessions.clone(),
-        tools.clone(),
-    ).await?);
+    let agent = Arc::new(
+        AgentLoop::with_agent_and_tools(
+            &config,
+            llm_agent,
+            mofa_provider,
+            bus.clone(),
+            sessions.clone(),
+            tools.clone(),
+        )
+        .await?,
+    );
 
     // Create subagent manager from agent loop
     let subagent_manager = Arc::new(SubagentManager::new(agent.clone()));
@@ -657,7 +628,11 @@ async fn command_channels_login() -> Result<()> {
     // Check if already built
     let dist_js = user_bridge.join("dist").join("index.js");
     if dist_js.exists() {
-        println!("{} Bridge already built at: {}", MOFA_LOGO, user_bridge.display());
+        println!(
+            "{} Bridge already built at: {}",
+            MOFA_LOGO,
+            user_bridge.display()
+        );
         println!("\nStarting bridge...");
         println!("Scan the QR code to connect.\n");
 
@@ -681,25 +656,30 @@ async fn command_channels_login() -> Result<()> {
         .unwrap_or(false);
 
     if !npm_exists {
-        println!("{}", yellow.apply_to("npm not found. Please install Node.js >= 18."));
+        println!(
+            "{}",
+            yellow.apply_to("npm not found. Please install Node.js >= 18.")
+        );
         return Err(anyhow!("npm not found"));
     }
 
     // Find source bridge
     let exe_path = std::env::current_exe()?;
-    let exe_dir = exe_path.parent()
+    let exe_dir = exe_path
+        .parent()
         .ok_or_else(|| anyhow!("Could not determine executable directory"))?;
 
     // Possible bridge locations
     let bridge_candidates = vec![
-        exe_dir.join("bridge"),              // Installed with binary
-        exe_dir.join("../bridge"),           // Development
-        exe_dir.join("../../bridge"),        // Another dev layout
+        exe_dir.join("bridge"),                // Installed with binary
+        exe_dir.join("../bridge"),             // Development
+        exe_dir.join("../../bridge"),          // Another dev layout
         PathBuf::from("/opt/mofaclaw/bridge"), // System installation
-        PathBuf::from("./bridge"),           // Current directory
+        PathBuf::from("./bridge"),             // Current directory
     ];
 
-    let source = bridge_candidates.into_iter()
+    let source = bridge_candidates
+        .into_iter()
         .find(|p| p.join("package.json").exists());
 
     let source = match source {
@@ -715,15 +695,18 @@ async fn command_channels_login() -> Result<()> {
     println!("{} Setting up bridge...", MOFA_LOGO);
 
     // Copy to user directory
-    tokio::fs::create_dir_all(user_bridge.parent().unwrap()).await
+    tokio::fs::create_dir_all(user_bridge.parent().unwrap())
+        .await
         .context("Failed to create .mofaclaw directory")?;
 
     if user_bridge.exists() {
-        tokio::fs::remove_dir_all(&user_bridge).await
+        tokio::fs::remove_dir_all(&user_bridge)
+            .await
             .context("Failed to remove old bridge directory")?;
     }
 
-    copy_dir_recursive(&source, &user_bridge).await
+    copy_dir_recursive(&source, &user_bridge)
+        .await
         .context("Failed to copy bridge files")?;
 
     println!("  Installing dependencies...");
@@ -770,8 +753,7 @@ async fn command_channels_login() -> Result<()> {
 
 /// Cron commands
 async fn command_cron(cmd: CronCommands) -> Result<()> {
-    use mofaclaw_core::cron::{CronService, CronSchedule};
-    use std::path::PathBuf;
+    use mofaclaw_core::cron::{CronSchedule, CronService};
 
     let config = load_config().await?;
     let workspace = config.workspace_path();
@@ -814,7 +796,8 @@ async fn command_cron(cmd: CronCommands) -> Result<()> {
 
                     // Show next run time
                     if let Some(next) = job.state.next_run_at_ms {
-                        let next_time = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(next);
+                        let next_time =
+                            chrono::DateTime::<chrono::Utc>::from_timestamp_millis(next);
                         if let Some(dt) = next_time {
                             println!("      Next run: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
                         }
@@ -824,7 +807,12 @@ async fn command_cron(cmd: CronCommands) -> Result<()> {
                 }
             }
         }
-        CronCommands::Add { name, message, every, cron } => {
+        CronCommands::Add {
+            name,
+            message,
+            every,
+            cron,
+        } => {
             let schedule = if let Some(seconds) = every {
                 CronSchedule::every(seconds as u64)
             } else if let Some(expr) = cron {
@@ -870,7 +858,10 @@ async fn command_cron(cmd: CronCommands) -> Result<()> {
             if ran {
                 println!("✅ Job executed: {}", job_id);
             } else {
-                println!("⚠️  Failed to run job: {} (job not found or disabled)", job_id);
+                println!(
+                    "⚠️  Failed to run job: {} (job not found or disabled)",
+                    job_id
+                );
             }
         }
     }
@@ -971,9 +962,7 @@ async fn copy_builtin_skills(workspace: &PathBuf) -> Result<()> {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_dir() {
-                let skill_name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let skill_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
                 let dest = workspace_skills.join(skill_name);
 
@@ -989,7 +978,11 @@ async fn copy_builtin_skills(workspace: &PathBuf) -> Result<()> {
         }
 
         if copied_count > 0 {
-            println!("✅ Copied {} builtin skills to {}", copied_count, workspace_skills.display());
+            println!(
+                "✅ Copied {} builtin skills to {}",
+                copied_count,
+                workspace_skills.display()
+            );
         }
     }
 
@@ -1032,16 +1025,23 @@ async fn command_session(cmd: SessionCommands) -> Result<()> {
                 for info in &session_list {
                     if verbose {
                         println!("  Key: {}", info.key);
-                        println!("    Created: {}", info.created_at
-                            .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                            .unwrap_or_else(|| "N/A".to_string()));
-                        println!("    Updated: {}", info.updated_at
-                            .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                            .unwrap_or_else(|| "N/A".to_string()));
+                        println!(
+                            "    Created: {}",
+                            info.created_at
+                                .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_else(|| "N/A".to_string())
+                        );
+                        println!(
+                            "    Updated: {}",
+                            info.updated_at
+                                .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_else(|| "N/A".to_string())
+                        );
                         println!("    Path: {}", info.path.display());
                         println!();
                     } else {
-                        println!("  {} ({})",
+                        println!(
+                            "  {} ({})",
                             info.key,
                             info.updated_at
                                 .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
@@ -1057,8 +1057,14 @@ async fn command_session(cmd: SessionCommands) -> Result<()> {
             match session {
                 Ok(session) => {
                     println!("Session: {}\n", session.key);
-                    println!("Created: {}", session.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
-                    println!("Updated: {}", session.updated_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    println!(
+                        "Created: {}",
+                        session.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
+                    println!(
+                        "Updated: {}",
+                        session.updated_at.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
                     println!("Messages: {}\n", session.len());
 
                     for msg in &session.messages {
@@ -1069,7 +1075,8 @@ async fn command_session(cmd: SessionCommands) -> Result<()> {
                             _ => console::Style::new(),
                         };
 
-                        println!("{} [{}]",
+                        println!(
+                            "{} [{}]",
                             role_style.apply_to(format!("{:?}", msg.role)),
                             msg.timestamp.format("%H:%M:%S")
                         );

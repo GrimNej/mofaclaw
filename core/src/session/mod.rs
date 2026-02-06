@@ -4,18 +4,21 @@
 //! mofaclaw-specific conversion utilities.
 
 use chrono::{DateTime, Utc};
-use std::path::{Path, PathBuf};
+use serde_json::json;
+use std::path::PathBuf;
 
 // Re-export mofa_sdk's Session types
 pub use mofa_sdk::agent::{
-    JsonlSessionStorage, MemorySessionStorage, Session,
-    SessionManager as MofaSessionManager, SessionMessage,
-    SessionStorage,
+    JsonlSessionStorage, MemorySessionStorage, Session, SessionManager as MofaSessionManager,
+    SessionMessage, SessionStorage,
 };
 
 use crate::error::Result;
 use crate::types::{Message, MessageContent, MessageRole};
-use crate::{get_data_dir, Config};
+use crate::{Config, get_data_dir};
+
+const STRUCTURED_CONTENT_PREFIX: &str = "__mofaclaw_content__:";
+const SESSION_SCHEMA_VERSION: u32 = 1;
 
 /// Information about a session for listing purposes
 #[derive(Debug, Clone)]
@@ -39,7 +42,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Create a new session manager from config
-    pub fn new(config: &Config) -> Self {
+    pub fn new(_config: &Config) -> Self {
         let sessions_dir = get_data_dir().join("sessions");
 
         // Use a blocking task to create the async SessionManager
@@ -60,7 +63,10 @@ impl SessionManager {
             })
         });
 
-        Self { inner, sessions_dir }
+        Self {
+            inner,
+            sessions_dir,
+        }
     }
 
     /// Create with custom sessions directory
@@ -72,12 +78,17 @@ impl SessionManager {
 
                 match JsonlSessionStorage::new(&sessions_dir_clone).await {
                     Ok(storage) => MofaSessionManager::with_storage(Box::new(storage)),
-                    Err(_) => MofaSessionManager::with_storage(Box::new(MemorySessionStorage::new())),
+                    Err(_) => {
+                        MofaSessionManager::with_storage(Box::new(MemorySessionStorage::new()))
+                    }
                 }
             })
         });
 
-        Self { inner, sessions_dir }
+        Self {
+            inner,
+            sessions_dir,
+        }
     }
 
     /// Get an existing session or create a new one (delegates to mofa)
@@ -100,8 +111,14 @@ impl SessionManager {
 
     /// Save a session to disk (delegates to mofa)
     pub async fn save(&self, session: &Session) -> Result<()> {
+        let mut session = session.clone();
+        session
+            .metadata
+            .entry("schema_version".to_string())
+            .or_insert_with(|| json!(SESSION_SCHEMA_VERSION));
+
         self.inner
-            .save(session)
+            .save(&session)
             .await
             .map_err(|e| crate::error::SessionError::SaveFailed(e.to_string()))?;
         Ok(())
@@ -193,7 +210,7 @@ pub fn messages_to_session_messages(messages: &[Message]) -> Vec<SessionMessage>
         .iter()
         .map(|m| SessionMessage {
             role: format!("{:?}", m.role).to_lowercase(),
-            content: m.content_as_text(), // Extract text from structured content
+            content: encode_message_content(m.content.as_ref()),
             timestamp: Utc::now(),
         })
         .collect()
@@ -201,8 +218,7 @@ pub fn messages_to_session_messages(messages: &[Message]) -> Vec<SessionMessage>
 
 /// Convert SessionMessages to mofaclaw Messages for LLM context
 ///
-/// Note: SessionMessages only store text content, so tool calls and
-/// structured content (e.g., vision images) are not preserved.
+/// Note: Structured content is preserved by encoding it into the content string.
 pub fn session_messages_to_messages(session_messages: &[SessionMessage]) -> Vec<Message> {
     session_messages
         .iter()
@@ -216,7 +232,7 @@ pub fn session_messages_to_messages(session_messages: &[SessionMessage]) -> Vec<
             };
             Message {
                 role,
-                content: Some(MessageContent::Text(sm.content.clone())),
+                content: decode_message_content(&sm.content),
                 tool_call_id: None,
                 name: None,
                 tool_calls: Vec::new(),
@@ -254,9 +270,34 @@ impl SessionExt for Session {
     }
 }
 
+fn encode_message_content(content: Option<&MessageContent>) -> String {
+    let Some(content) = content else {
+        return String::new();
+    };
+
+    match content {
+        MessageContent::Text(text) => text.clone(),
+        MessageContent::Array(_) => {
+            let payload = serde_json::to_string(content).unwrap_or_else(|_| "[]".to_string());
+            format!("{}{}", STRUCTURED_CONTENT_PREFIX, payload)
+        }
+    }
+}
+
+fn decode_message_content(content: &str) -> Option<MessageContent> {
+    if let Some(payload) = content.strip_prefix(STRUCTURED_CONTENT_PREFIX) {
+        if let Ok(parsed) = serde_json::from_str::<MessageContent>(payload) {
+            return Some(parsed);
+        }
+    }
+
+    Some(MessageContent::Text(content.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_safe_filename() {
@@ -278,6 +319,33 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, MessageRole::User);
         assert_eq!(messages[0].content_as_text(), "Hello world");
+
+        // Structured content round-trip
+        let structured = Message::user_with_content(MessageContent::Array(vec![
+            json!({
+                "type": "image_url",
+                "image_url": { "url": "data:image/png;base64,AAA" }
+            }),
+            json!({
+                "type": "text",
+                "text": "Look at this"
+            }),
+        ]));
+        let session_msgs = messages_to_session_messages(&[structured.clone()]);
+        assert_eq!(session_msgs.len(), 1);
+        assert!(
+            session_msgs[0]
+                .content
+                .starts_with(STRUCTURED_CONTENT_PREFIX)
+        );
+
+        let messages = session_messages_to_messages(&session_msgs);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, MessageRole::User);
+        assert!(matches!(
+            messages[0].content,
+            Some(MessageContent::Array(_))
+        ));
     }
 
     #[tokio::test(flavor = "multi_thread")]

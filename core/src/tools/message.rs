@@ -1,8 +1,8 @@
 //! Message tool for sending messages to users
 
 use super::base::{SimpleTool, ToolInput, ToolResult};
-use crate::messages::OutboundMessage;
 use crate::Result;
+use crate::messages::OutboundMessage;
 use async_trait::async_trait;
 use mofa_sdk::agent::ToolCategory;
 use serde_json::json;
@@ -10,7 +10,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Callback type for sending messages
-pub type SendCallback = Arc<dyn Fn(OutboundMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> + Send + Sync>;
+pub type SendCallback = Arc<
+    dyn Fn(
+            OutboundMessage,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Internal state for MessageTool with interior mutability
 struct MessageToolState {
@@ -158,7 +164,9 @@ impl SimpleTool for MessageTool {
         if let Some(callback) = callback {
             let msg = OutboundMessage::new(&channel, &chat_id, content);
             match callback(msg).await {
-                Ok(_) => ToolResult::success_text(format!("Message sent to {}:{}", channel, chat_id)),
+                Ok(_) => {
+                    ToolResult::success_text(format!("Message sent to {}:{}", channel, chat_id))
+                }
                 Err(e) => ToolResult::failure(format!("Error sending message: {}", e)),
             }
         } else {

@@ -70,8 +70,14 @@ impl InboundMessage {
             format!("{}:{}", origin_channel, origin_chat_id),
             content,
         );
-        msg.metadata.insert("origin_channel".to_string(), serde_json::json!(origin_channel));
-        msg.metadata.insert("origin_chat_id".to_string(), serde_json::json!(origin_chat_id));
+        msg.metadata.insert(
+            "origin_channel".to_string(),
+            serde_json::json!(origin_channel),
+        );
+        msg.metadata.insert(
+            "origin_chat_id".to_string(),
+            serde_json::json!(origin_chat_id),
+        );
         msg
     }
 

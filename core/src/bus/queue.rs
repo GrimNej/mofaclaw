@@ -4,7 +4,7 @@ use crate::error::{ChannelError, Result};
 use crate::messages::{InboundMessage, OutboundMessage};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 
 /// Async message bus that decouples chat channels from the agent core
@@ -18,7 +18,13 @@ pub struct MessageBus {
     outbound_subscribers: Arc<RwLock<HashMap<String, Vec<OutboundCallback>>>>,
 }
 
-type OutboundCallback = Arc<dyn Fn(OutboundMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> + Send + Sync>;
+type OutboundCallback = Arc<
+    dyn Fn(
+            OutboundMessage,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        + Send
+        + Sync,
+>;
 
 impl MessageBus {
     /// Create a new message bus

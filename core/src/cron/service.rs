@@ -1,7 +1,7 @@
 //! Cron service for scheduling agent tasks
 
 use super::types::{CronJob, CronSchedule, CronStore};
-use crate::error::{AgentError, Result};
+use crate::error::Result;
 use chrono::Utc;
 use cron::Schedule;
 use std::path::PathBuf;
@@ -9,11 +9,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 /// Callback type for executing a cron job
-pub type CronCallback = Arc<dyn Fn(CronJob) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send>> + Send + Sync>;
+pub type CronCallback = Arc<
+    dyn Fn(
+            CronJob,
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Service for managing and executing scheduled jobs
 pub struct CronService {
@@ -52,7 +59,10 @@ impl CronService {
         // Recompute next run times
         self.recompute_next_runs().await;
 
-        info!("Cron service started with {} jobs", self.store.read().await.jobs.len());
+        info!(
+            "Cron service started with {} jobs",
+            self.store.read().await.jobs.len()
+        );
 
         // Arm the timer
         self.arm_timer().await;
@@ -113,12 +123,8 @@ impl CronService {
     /// Compute the next run time for a schedule
     fn compute_next_run(&self, schedule: &CronSchedule, now_ms: i64) -> Option<i64> {
         match schedule {
-            CronSchedule::At { at_ms } => {
-                at_ms.filter(|&at| at > now_ms)
-            }
-            CronSchedule::Every { every_ms } => {
-                every_ms.map(|interval| now_ms + interval as i64)
-            }
+            CronSchedule::At { at_ms } => at_ms.filter(|&at| at > now_ms),
+            CronSchedule::Every { every_ms } => every_ms.map(|interval| now_ms + interval as i64),
             CronSchedule::Cron { expr, .. } => {
                 expr.as_ref().and_then(|expr| {
                     // Try to parse as cron expression
@@ -163,8 +169,6 @@ impl CronService {
         let running = Arc::clone(&self.running);
         let store = Arc::clone(&self.store);
         let on_job = self.on_job.clone();
-        let store_path = self.store_path.clone();
-
         let handle = tokio::spawn(async move {
             tokio::time::sleep(delay).await;
 
@@ -179,12 +183,7 @@ impl CronService {
                 .await
                 .jobs
                 .iter()
-                .filter(|j| {
-                    j.enabled
-                        && j.state.next_run_at_ms
-                            .map(|t| t <= now)
-                            .unwrap_or(false)
-                })
+                .filter(|j| j.enabled && j.state.next_run_at_ms.map(|t| t <= now).unwrap_or(false))
                 .cloned()
                 .collect();
 
@@ -335,7 +334,10 @@ impl CronService {
                 j.updated_at_ms = now;
 
                 // Compute next run for recurring jobs
-                if matches!(j.schedule, CronSchedule::Every { .. } | CronSchedule::Cron { .. }) {
+                if matches!(
+                    j.schedule,
+                    CronSchedule::Every { .. } | CronSchedule::Cron { .. }
+                ) {
                     j.state.next_run_at_ms = self.compute_next_run(&j.schedule, now);
                 }
 

@@ -12,7 +12,12 @@ use tokio::sync::RwLock;
 #[async_trait]
 pub trait SubagentManager: Send + Sync {
     /// Spawn a new subagent with the given prompt
-    async fn spawn(&self, prompt: &str, origin_channel: &str, origin_chat_id: &str) -> Result<String>;
+    async fn spawn(
+        &self,
+        prompt: &str,
+        origin_channel: &str,
+        origin_chat_id: &str,
+    ) -> Result<String>;
 }
 
 /// Internal state for SpawnTool with interior mutability
@@ -29,7 +34,12 @@ enum SpawnManagerHolder {
 }
 
 impl SpawnManagerHolder {
-    async fn spawn(&self, prompt: &str, origin_channel: &str, origin_chat_id: &str) -> Result<String> {
+    async fn spawn(
+        &self,
+        prompt: &str,
+        origin_channel: &str,
+        origin_chat_id: &str,
+    ) -> Result<String> {
         match self {
             SpawnManagerHolder::Arc(m) => m.spawn(prompt, origin_channel, origin_chat_id).await,
         }
@@ -182,7 +192,12 @@ impl InMemorySubagentManager {
 
 #[async_trait]
 impl SubagentManager for InMemorySubagentManager {
-    async fn spawn(&self, prompt: &str, _origin_channel: &str, _origin_chat_id: &str) -> Result<String> {
+    async fn spawn(
+        &self,
+        prompt: &str,
+        _origin_channel: &str,
+        _origin_chat_id: &str,
+    ) -> Result<String> {
         self.spawned_tasks.write().await.push(prompt.to_string());
         Ok(format!("Subagent spawned with prompt: {}", prompt))
     }

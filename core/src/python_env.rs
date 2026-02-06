@@ -32,7 +32,10 @@ impl PythonEnv {
         for cmd in &["python3", "python"] {
             match Self::check_version(cmd).await {
                 Ok((major, minor)) => {
-                    info!("Found Python: {} (version {}.{}), command: {}", cmd, major, minor, cmd);
+                    info!(
+                        "Found Python: {} (version {}.{}), command: {}",
+                        cmd, major, minor, cmd
+                    );
                     return Ok(Self {
                         python_cmd: cmd.to_string(),
                         major,

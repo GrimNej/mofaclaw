@@ -1,6 +1,5 @@
 //! Base channel trait
 
-use crate::bus::MessageBus;
 use crate::error::Result;
 use async_trait::async_trait;
 

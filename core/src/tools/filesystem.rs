@@ -1,10 +1,9 @@
 //! File system tools: read, write, edit, list
 
 use super::base::{SimpleTool, ToolInput, ToolResult};
-use crate::error::{Result, ToolError};
 use async_trait::async_trait;
 use mofa_sdk::agent::ToolCategory;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -52,7 +51,11 @@ impl SimpleTool for ReadFileTool {
             return ToolResult::failure(format!("Error: File not found: {}", path.display()));
         }
 
-        if !tokio::fs::metadata(&path).await.map(|m| m.is_file()).unwrap_or(false) {
+        if !tokio::fs::metadata(&path)
+            .await
+            .map(|m| m.is_file())
+            .unwrap_or(false)
+        {
             return ToolResult::failure(format!("Error: Not a file: {}", path.display()));
         }
 
@@ -124,7 +127,11 @@ impl SimpleTool for WriteFileTool {
         }
 
         match fs::write(&path, content).await {
-            Ok(_) => ToolResult::success_text(format!("Successfully wrote {} bytes to {}", content.len(), path.display())),
+            Ok(_) => ToolResult::success_text(format!(
+                "Successfully wrote {} bytes to {}",
+                content.len(),
+                path.display()
+            )),
             Err(e) => ToolResult::failure(format!("Error writing file: {}", e).to_string()),
         }
     }
@@ -202,7 +209,9 @@ impl SimpleTool for EditFileTool {
         };
 
         if !content.contains(old_text) {
-            return ToolResult::failure("Error: old_text not found in file. Make sure it matches exactly.".to_string());
+            return ToolResult::failure(
+                "Error: old_text not found in file. Make sure it matches exactly.".to_string(),
+            );
         }
 
         let count = content.matches(old_text).count();
@@ -270,21 +279,28 @@ impl SimpleTool for ListDirTool {
             return ToolResult::failure(format!("Error: Directory not found: {}", path.display()));
         }
 
-        if !tokio::fs::metadata(&path).await.map(|m| m.is_dir()).unwrap_or(false) {
+        if !tokio::fs::metadata(&path)
+            .await
+            .map(|m| m.is_dir())
+            .unwrap_or(false)
+        {
             return ToolResult::failure(format!("Error: Not a directory: {}", path.display()));
         }
 
         let mut entries = match fs::read_dir(&path).await {
             Ok(e) => e,
-            Err(e) => return ToolResult::failure(format!("Error listing directory: {}", e).to_string()),
+            Err(e) => {
+                return ToolResult::failure(format!("Error listing directory: {}", e).to_string());
+            }
         };
 
         let mut items = Vec::new();
-        let mut entries = entries;
         loop {
             let entry = match entries.next_entry().await {
                 Ok(e) => e,
-                Err(err) => return ToolResult::failure(format!("Error reading directory: {}", err)),
+                Err(err) => {
+                    return ToolResult::failure(format!("Error reading directory: {}", err));
+                }
             };
             let entry = match entry {
                 Some(e) => e,
@@ -292,7 +308,11 @@ impl SimpleTool for ListDirTool {
             };
             let name = entry.file_name().to_string_lossy().to_string();
             let entry_path = entry.path();
-            let prefix = if tokio::fs::metadata(&entry_path).await.map(|m| m.is_dir()).unwrap_or(false) {
+            let prefix = if tokio::fs::metadata(&entry_path)
+                .await
+                .map(|m| m.is_dir())
+                .unwrap_or(false)
+            {
                 "📁 "
             } else {
                 "📄 "

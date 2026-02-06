@@ -1,16 +1,14 @@
 //! Web tools: web_search and web_fetch
 
 use super::base::{SimpleTool, ToolInput, ToolResult};
-use crate::error::{Result, ToolError};
 use async_trait::async_trait;
 use mofa_sdk::agent::ToolCategory;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 
 // For readability extraction
 use readability::extractor;
-use reqwest::Url;
 
 /// User agent string for web requests
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36";
@@ -100,7 +98,10 @@ impl SimpleTool for WebSearchTool {
         };
 
         if !response.status().is_success() {
-            return ToolResult::failure(format!("Error: API returned status {}", response.status()));
+            return ToolResult::failure(format!(
+                "Error: API returned status {}",
+                response.status()
+            ));
         }
 
         let json: Value = match response.json().await {
@@ -232,7 +233,10 @@ impl SimpleTool for WebFetchTool {
         let (content, extractor_type) = if content_type.contains("application/json") {
             // JSON - try to format
             if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                (serde_json::to_string_pretty(&json).unwrap_or(text.to_string()), "json")
+                (
+                    serde_json::to_string_pretty(&json).unwrap_or(text.to_string()),
+                    "json",
+                )
             } else {
                 (text.to_string(), "raw")
             }
@@ -243,7 +247,9 @@ impl SimpleTool for WebFetchTool {
             // HTML - extract readable content
             let product = match extractor::extract(&mut text.as_bytes(), &final_url) {
                 Ok(p) => p,
-                Err(e) => return ToolResult::failure(format!("Readability extraction failed: {}", e)),
+                Err(e) => {
+                    return ToolResult::failure(format!("Readability extraction failed: {}", e));
+                }
             };
             let html_content = product.content;
             let title = product.title;
@@ -269,7 +275,7 @@ impl SimpleTool for WebFetchTool {
         let content_len = content.len();
         let truncated = content_len > max_chars;
         let truncated_content = if truncated {
-            let mut chars = content.chars();
+            let chars = content.chars();
             chars.take(max_chars).collect::<String>()
         } else {
             content

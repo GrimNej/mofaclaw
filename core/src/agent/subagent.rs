@@ -39,7 +39,9 @@ impl SubagentManager {
         origin_channel: &str,
         origin_chat_id: &str,
     ) -> crate::error::Result<String> {
-        self.inner.spawn_subagent(prompt, origin_channel, origin_chat_id).await
+        self.inner
+            .spawn_subagent(prompt, origin_channel, origin_chat_id)
+            .await
     }
 
     /// Get all active subagents
@@ -56,7 +58,12 @@ impl SubagentManager {
 /// Implement the spawn tool's SubagentManager trait for SubagentManager
 #[async_trait::async_trait]
 impl crate::tools::spawn::SubagentManager for SubagentManager {
-    async fn spawn(&self, prompt: &str, origin_channel: &str, origin_chat_id: &str) -> crate::error::Result<String> {
+    async fn spawn(
+        &self,
+        prompt: &str,
+        origin_channel: &str,
+        origin_chat_id: &str,
+    ) -> crate::error::Result<String> {
         self.spawn(prompt, origin_channel, origin_chat_id).await
     }
 }

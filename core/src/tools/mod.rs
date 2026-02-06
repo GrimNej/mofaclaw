@@ -3,18 +3,18 @@
 //! Tools are capabilities that the agent can use to interact with the environment,
 //! such as reading files, executing commands, searching the web, etc.
 
-pub mod registry;
 pub mod base;
 pub mod filesystem;
-pub mod shell;
-pub mod web;
 pub mod message;
+pub mod registry;
+pub mod shell;
 pub mod spawn;
+pub mod web;
 
-pub use registry::{ToolRegistry, ToolRegistryExecutor};
 pub use base::{ToolDefinition, ToolExecutor};
-pub use filesystem::{ReadFileTool, WriteFileTool, EditFileTool, ListDirTool};
-pub use shell::ExecTool;
-pub use web::{WebSearchTool, WebFetchTool};
+pub use filesystem::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 pub use message::MessageTool;
-pub use spawn::{SpawnTool, SubagentManager, InMemorySubagentManager};
+pub use registry::{ToolRegistry, ToolRegistryExecutor};
+pub use shell::ExecTool;
+pub use spawn::{InMemorySubagentManager, SpawnTool, SubagentManager};
+pub use web::{WebFetchTool, WebSearchTool};

@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::messages::{InboundMessage, OutboundMessage};
 use async_trait::async_trait;
 use futures_util::stream::StreamExt;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,7 +42,7 @@ impl WhatsAppChannel {
     }
 
     /// Handle a message from the bridge
-    async fn handle_bridge_message(&self, bus: &MessageBus, raw: &str) {
+    async fn handle_bridge_message(bus: &MessageBus, connected: &Arc<RwLock<bool>>, raw: &str) {
         // Parse JSON
         let data: Value = match serde_json::from_str(raw) {
             Ok(v) => v,
@@ -89,13 +89,8 @@ impl WhatsAppChannel {
                 // Convert to HashMap
                 let metadata: HashMap<String, Value> = json_metadata.into_iter().collect();
 
-                let msg = InboundMessage::with_metadata(
-                    "whatsapp",
-                    chat_id,
-                    sender,
-                    content,
-                    metadata,
-                );
+                let msg =
+                    InboundMessage::with_metadata("whatsapp", chat_id, sender, content, metadata);
 
                 // Publish to bus
                 if let Err(e) = bus.publish_inbound(msg).await {
@@ -108,8 +103,8 @@ impl WhatsAppChannel {
                     info!("WhatsApp status: {}", status);
 
                     match status {
-                        "connected" => *self.connected.write().await = true,
-                        "disconnected" => *self.connected.write().await = false,
+                        "connected" => *connected.write().await = true,
+                        "disconnected" => *connected.write().await = false,
                         _ => {}
                     }
                 }
@@ -164,9 +159,8 @@ impl Channel for WhatsAppChannel {
                         while *running.read().await {
                             match ws_stream.next().await {
                                 Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) => {
-                                    // Handle the message - we need a channel instance here
-                                    // For now, just log it
                                     info!("Received from WhatsApp bridge: {}", text);
+                                    Self::handle_bridge_message(&bus, &connected, &text).await;
                                 }
                                 Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_))) => {
                                     info!("WhatsApp bridge connection closed");
@@ -232,7 +226,10 @@ impl WhatsAppChannel {
 
         // In a full implementation, we'd need to store the WebSocket sender
         // For now, this is a placeholder that logs the message
-        info!("Sending WhatsApp message to {}: {}", msg.chat_id, msg.content);
+        info!(
+            "Sending WhatsApp message to {}: {}",
+            msg.chat_id, msg.content
+        );
 
         Ok(())
     }

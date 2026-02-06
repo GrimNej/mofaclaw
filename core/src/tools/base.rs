@@ -4,12 +4,12 @@
 //! Tools should directly implement mofa-sdk's SimpleTool trait
 //! for seamless integration.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 // Re-export mofa-sdk's SimpleTool and related types
 pub use mofa_sdk::agent::{SimpleTool, SimpleToolAdapter, as_tool};
-pub use mofa_sdk::kernel::{Tool, ToolInput, ToolResult, ToolMetadata};
+pub use mofa_sdk::kernel::{Tool, ToolInput, ToolMetadata, ToolResult};
 
 /// Definition of a tool's parameters in JSON Schema format
 pub type ToolParameters = Value;
@@ -34,7 +34,11 @@ pub struct ToolDefinition {
 }
 
 impl ToolDefinition {
-    pub fn new(name: impl Into<String>, description: impl Into<String>, parameters: ToolParameters) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: ToolParameters,
+    ) -> Self {
         Self {
             name: name.into(),
             description: description.into(),

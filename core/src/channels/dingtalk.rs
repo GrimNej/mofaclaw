@@ -10,18 +10,18 @@ use crate::error::{ChannelError, Result};
 use crate::messages::InboundMessage;
 use crate::python_env::PythonEnv;
 use async_trait::async_trait;
-use futures_util::{stream::StreamExt, SinkExt};
-use serde_json::json;
+use futures_util::{SinkExt, stream::StreamExt};
 use serde_json::Value;
+use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::process::Child as TokioChild;
 use tokio::process::Command as TokioCommand;
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tracing::{error, info, warn};
 
 /// Python bridge code embedded in Rust
@@ -355,15 +355,20 @@ impl DingTalkChannel {
         python_env.ensure_packages(&required_packages).await?;
 
         let python_cmd_str = python_env.command().to_string();
-        info!("Using Python: {} ({})", python_cmd_str, python_env.version_string());
+        info!(
+            "Using Python: {} ({})",
+            python_cmd_str,
+            python_env.version_string()
+        );
 
         // Create Python script file in .mofaclaw directory
         let mofaclaw_dir = dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(".mofaclaw");
 
-        fs::create_dir_all(&mofaclaw_dir)
-            .map_err(|e| ChannelError::SendFailed(format!("Failed to create .mofaclaw directory: {}", e)))?;
+        fs::create_dir_all(&mofaclaw_dir).map_err(|e| {
+            ChannelError::SendFailed(format!("Failed to create .mofaclaw directory: {}", e))
+        })?;
 
         let python_path = mofaclaw_dir.join("dingtalk_bridge.py");
 
@@ -378,8 +383,12 @@ impl DingTalkChannel {
         let child_handle_clone = Arc::clone(&self.python_child);
 
         info!("Starting Python subprocess...");
-        info!("  Command: {} {} <client_id> <client_secret> {}",
-              python_cmd_str, python_path.display(), bridge_port);
+        info!(
+            "  Command: {} {} <client_id> <client_secret> {}",
+            python_cmd_str,
+            python_path.display(),
+            bridge_port
+        );
 
         // Spawn Python process
         let child = match TokioCommand::new(&python_cmd_str)
@@ -544,7 +553,11 @@ impl Channel for DingTalkChannel {
                         let tx_guard = outbound_tx_for_spawn.read().await;
                         if let Some(tx) = tx_guard.as_ref() {
                             // Debug: print the chat_id being used
-                            info!("📤 Sending outbound message to DingTalk - chat_id: {}, content: {}", msg.chat_id, msg.content.chars().take(50).collect::<String>());
+                            info!(
+                                "📤 Sending outbound message to DingTalk - chat_id: {}, content: {}",
+                                msg.chat_id,
+                                msg.content.chars().take(50).collect::<String>()
+                            );
                             // Create send message for Python bridge
                             let send_msg = json!({
                                 "type": "send",
@@ -689,7 +702,10 @@ impl Channel for DingTalkChannel {
         // Also try to directly kill the Python process if we have a handle
         let mut child_guard = self.python_child.lock().await;
         if let Some(mut child) = child_guard.take() {
-            info!("Terminating Python bridge process (PID: {:?})...", child.id());
+            info!(
+                "Terminating Python bridge process (PID: {:?})...",
+                child.id()
+            );
             match child.start_kill() {
                 Ok(_) => {
                     info!("Sent termination signal to Python process");
@@ -702,7 +718,9 @@ impl Channel for DingTalkChannel {
                             warn!("Error waiting for Python bridge exit: {}", e);
                         }
                         Err(_) => {
-                            warn!("Python bridge did not exit within 5 seconds (may have been force-killed)");
+                            warn!(
+                                "Python bridge did not exit within 5 seconds (may have been force-killed)"
+                            );
                         }
                     }
                 }

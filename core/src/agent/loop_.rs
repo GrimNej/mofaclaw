@@ -3,27 +3,27 @@
 //! This module handles message processing and subagent spawning.
 //! Uses mofa framework's LLMAgent for LLM interaction.
 
+use crate::Config;
 use crate::agent::ContextBuilder;
+use crate::agent::SubagentManager;
 use crate::bus::MessageBus;
 use crate::error::Result;
 use crate::messages::{InboundMessage, OutboundMessage};
-use crate::session::{SessionManager, SessionExt};
-use crate::tools::{MessageTool, SpawnTool, ToolRegistry, ToolRegistryExecutor};
-use crate::tools::filesystem::{ReadFileTool, WriteFileTool, EditFileTool, ListDirTool};
+use crate::session::{SessionExt, SessionManager};
+use crate::tools::filesystem::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 use crate::tools::shell::ExecTool;
-use crate::tools::web::{WebSearchTool, WebFetchTool};
-use crate::{Config};
-use crate::agent::SubagentManager;
+use crate::tools::web::{WebFetchTool, WebSearchTool};
+use crate::tools::{MessageTool, SpawnTool, ToolRegistry, ToolRegistryExecutor};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 // Import mofa framework components
 use mofa_sdk::llm::{
-    LLMAgent, LLMAgentBuilder, Tool, ToolExecutor,
-    ChatMessage, task_orchestrator::{TaskOrchestrator, TaskOrigin},
+    AgentLoop as MofaAgentLoop, AgentLoopConfig as MofaAgentLoopConfig, ChatMessage, ContentPart,
+    LLMAgent, MessageContent as LlmMessageContent, Role as LlmRole,
+    task_orchestrator::{TaskOrchestrator, TaskOrigin},
 };
-use mofa_sdk::agent::ToolRegistry as MofaToolRegistry;
 
 /// Information about an active subagent
 #[derive(Debug, Clone)]
@@ -46,7 +46,7 @@ pub struct ActiveSubagent {
 /// 6. Can spawn subagents for parallel tasks (via mofa's TaskOrchestrator)
 pub struct AgentLoop {
     /// Inner mofa LLMAgent for LLM interaction
-    agent: Arc<LLMAgent>,
+    _agent: Arc<LLMAgent>,
     /// LLM Provider
     provider: Arc<dyn mofa_sdk::llm::LLMProvider>,
     /// Tool registry (also used by agent)
@@ -63,6 +63,12 @@ pub struct AgentLoop {
     task_orchestrator: Arc<TaskOrchestrator>,
     /// Max tool iterations
     max_iterations: usize,
+    /// Default model
+    default_model: String,
+    /// Sampling temperature
+    temperature: Option<f32>,
+    /// Max tokens
+    max_tokens: Option<u32>,
 }
 
 impl AgentLoop {
@@ -77,6 +83,9 @@ impl AgentLoop {
     ) -> Result<Self> {
         let workspace = config.workspace_path();
         let max_iterations = config.agents.defaults.max_tool_iterations;
+        let default_model = config.agents.defaults.model.clone();
+        let temperature = Some(config.agents.defaults.temperature as f32);
+        let max_tokens = Some(config.agents.defaults.max_tokens as u32);
         let brave_api_key = config.get_brave_api_key();
 
         let context = ContextBuilder::new(config);
@@ -84,19 +93,14 @@ impl AgentLoop {
 
         // Register default tools
         let mut tools_guard = tools.write().await;
-        Self::register_default_tools(
-            &mut tools_guard,
-            &workspace,
-            brave_api_key,
-            bus.clone(),
-        );
+        Self::register_default_tools(&mut tools_guard, &workspace, brave_api_key, bus.clone());
         drop(tools_guard);
 
         // Create mofa TaskOrchestrator for subagent spawning
         let task_orchestrator = Arc::new(TaskOrchestrator::with_defaults(provider.clone()));
 
         Ok(Self {
-            agent,
+            _agent: agent,
             provider,
             tools,
             bus,
@@ -105,6 +109,9 @@ impl AgentLoop {
             running: Arc::new(RwLock::new(false)),
             task_orchestrator,
             max_iterations,
+            default_model,
+            temperature,
+            max_tokens,
         })
     }
 
@@ -121,13 +128,16 @@ impl AgentLoop {
         tools: Arc<RwLock<ToolRegistry>>,
     ) -> Result<Self> {
         let max_iterations = config.agents.defaults.max_tool_iterations;
+        let default_model = config.agents.defaults.model.clone();
+        let temperature = Some(config.agents.defaults.temperature as f32);
+        let max_tokens = Some(config.agents.defaults.max_tokens as u32);
         let context = ContextBuilder::new(config);
 
         // Create mofa TaskOrchestrator for subagent spawning
         let task_orchestrator = Arc::new(TaskOrchestrator::with_defaults(provider.clone()));
 
         Ok(Self {
-            agent,
+            _agent: agent,
             provider,
             tools,
             bus,
@@ -136,13 +146,16 @@ impl AgentLoop {
             running: Arc::new(RwLock::new(false)),
             task_orchestrator,
             max_iterations,
+            default_model,
+            temperature,
+            max_tokens,
         })
     }
 
     /// Register the default set of tools (without spawn tool)
     pub fn register_default_tools(
         registry: &mut ToolRegistry,
-        workspace: &std::path::Path,
+        _workspace: &std::path::Path,
         brave_api_key: Option<String>,
         bus: MessageBus,
     ) {
@@ -164,9 +177,7 @@ impl AgentLoop {
         // Message tool with bus callback
         let message_tool = MessageTool::with_callback(Arc::new(move |msg| {
             let bus = bus.clone();
-            Box::pin(async move {
-                bus.publish_outbound(msg).await
-            })
+            Box::pin(async move { bus.publish_outbound(msg).await })
         }));
         registry.register(message_tool);
     }
@@ -227,7 +238,10 @@ impl AgentLoop {
         let (response_channel, response_chat_id) = if msg.channel == "system" {
             // Parse origin from chat_id (format: "channel:chat_id")
             if let Some(pos) = msg.chat_id.find(':') {
-                (msg.chat_id[..pos].to_string(), msg.chat_id[pos + 1..].to_string())
+                (
+                    msg.chat_id[..pos].to_string(),
+                    msg.chat_id[pos + 1..].to_string(),
+                )
             } else {
                 ("cli".to_string(), msg.chat_id.clone())
             }
@@ -238,20 +252,26 @@ impl AgentLoop {
         let session_key = format!("{}:{}", response_channel, response_chat_id);
         let session = self.sessions.get_or_create(&session_key).await;
 
-        // Build messages (convert mofa session messages to mofaclaw messages)
+        // Build system prompt + history as LLM chat messages
         let history = session.get_history_as_messages(50);
-        let messages = self
-            .context
-            .build_messages(
-                history,
-                &msg.content,
-                None,
-                if msg.media.is_empty() { None } else { Some(&msg.media) },
-            )
-            .await?;
+        let system_prompt = self.context.build_system_prompt(None).await?;
+        let mut context_messages = Vec::new();
+        context_messages.push(ChatMessage::system(system_prompt));
+        for item in &history {
+            if let Some(chat_msg) = Self::to_chat_message(item) {
+                context_messages.push(chat_msg);
+            }
+        }
 
-        // Run agent loop
-        let final_content = self.run_agent_loop(messages).await?;
+        // Run agent loop with built-in tool iteration
+        let media = if msg.media.is_empty() {
+            None
+        } else {
+            Some(msg.media.clone())
+        };
+        let final_content = self
+            .run_agent_loop(context_messages, &msg.content, media)
+            .await?;
 
         // Save to session
         let mut session_updated = session.clone();
@@ -265,124 +285,91 @@ impl AgentLoop {
             session_updated.add_message("assistant", content);
         }
 
-        info!("Saving session: {} with {} messages", session_key, session_updated.len());
+        info!(
+            "Saving session: {} with {} messages",
+            session_key,
+            session_updated.len()
+        );
         if let Err(e) = self.sessions.save(&session_updated).await {
             error!("Failed to save session {}: {}", session_key, e);
             return Err(e.into());
         }
         info!("Session {} saved successfully", session_key);
 
-        Ok(final_content.map(|content| OutboundMessage::new(&response_channel, &response_chat_id, content)))
+        Ok(final_content
+            .map(|content| OutboundMessage::new(&response_channel, &response_chat_id, content)))
     }
 
-    /// Run the main agent loop using mofa framework's LLMClient with proper tool handling
-    async fn run_agent_loop(&self, messages: Vec<crate::types::Message>) -> Result<Option<String>> {
-        use mofa_sdk::llm::LLMClient;
+    /// Run the main agent loop using mofa framework's built-in AgentLoop
+    async fn run_agent_loop(
+        &self,
+        context: Vec<ChatMessage>,
+        content: &str,
+        media: Option<Vec<String>>,
+    ) -> Result<Option<String>> {
+        let tool_executor = Arc::new(ToolRegistryExecutor::new(self.tools.clone()))
+            as Arc<dyn mofa_sdk::llm::ToolExecutor>;
 
-        let client = LLMClient::new(self.provider.clone());
-
-        // Get tool definitions and executor
-        let tool_definitions: Vec<mofa_sdk::llm::Tool> = {
-            let tools_guard = self.tools.read().await;
-            MofaToolRegistry::list(tools_guard.inner()).iter().map(|t| {
-                let params_value: serde_json::Value = if t.parameters_schema.is_string() {
-                    serde_json::from_str(t.parameters_schema.as_str().unwrap_or("{}"))
-                        .unwrap_or_else(|_| serde_json::json!({}))
-                } else {
-                    t.parameters_schema.clone()
-                };
-                mofa_sdk::llm::Tool::function(&t.name, &t.description, params_value)
-            }).collect()
+        let config = MofaAgentLoopConfig {
+            max_tool_iterations: self.max_iterations,
+            default_model: self.default_model.clone(),
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
         };
 
-        let tool_executor = Arc::new(ToolRegistryExecutor::new(self.tools.clone())) as Arc<dyn mofa_sdk::llm::ToolExecutor>;
+        let agent_loop = MofaAgentLoop::new(self.provider.clone(), tool_executor, config);
 
-        // Build chat messages from history
-        let mut chat_messages = Vec::new();
+        let response = agent_loop
+            .process_with_options(context, content, media, None)
+            .await
+            .map_err(|e| crate::error::AgentError::ProviderError(e.to_string()))?;
 
-        for msg in &messages {
-            match msg.role {
-                crate::types::MessageRole::System => {
-                    if let Some(crate::types::MessageContent::Text(ref content)) = msg.content {
-                        chat_messages.push(mofa_sdk::llm::ChatMessage::system(content.clone()));
-                    }
-                }
-                crate::types::MessageRole::User => {
-                    if let Some(crate::types::MessageContent::Text(ref content)) = msg.content {
-                        chat_messages.push(mofa_sdk::llm::ChatMessage::user(content.clone()));
-                    }
-                }
-                crate::types::MessageRole::Assistant => {
-                    if let Some(crate::types::MessageContent::Text(ref content)) = msg.content {
-                        chat_messages.push(mofa_sdk::llm::ChatMessage::assistant(content.clone()));
-                    }
-                }
-                crate::types::MessageRole::Tool => {
-                    // Skip - tool results will be added during iteration
-                }
+        Ok(Some(response))
+    }
+
+    fn to_chat_message(msg: &crate::types::Message) -> Option<ChatMessage> {
+        use crate::types::MessageRole;
+
+        let content = msg.content.as_ref()?;
+        let llm_content = Self::to_llm_content(content);
+
+        match msg.role {
+            MessageRole::System => Some(ChatMessage {
+                role: LlmRole::System,
+                content: Some(llm_content),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }),
+            MessageRole::User => Some(ChatMessage::user_with_content(llm_content)),
+            MessageRole::Assistant => Some(ChatMessage {
+                role: LlmRole::Assistant,
+                content: Some(llm_content),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }),
+            MessageRole::Tool => {
+                let tool_call_id = msg.tool_call_id.as_deref()?;
+                Some(ChatMessage::tool_result(
+                    tool_call_id,
+                    msg.content_as_text(),
+                ))
             }
         }
+    }
 
-        // Run the agent loop with tool iteration
-        let mut current_messages = chat_messages;
-        let mut final_content = None;
-
-        for _iteration in 0..self.max_iterations {
-            // Create chat builder and send in one go
-            let response = if tool_definitions.is_empty() {
-                // No tools, just send messages
-                client.chat()
-                    .messages(current_messages.clone())
-                    .send()
-                    .await
-                    .map_err(|e| crate::error::AgentError::ProviderError(e.to_string()))?
-            } else {
-                // With tools
-                client.chat()
-                    .messages(current_messages.clone())
-                    .tools(tool_definitions.clone())
-                    .with_tool_executor(tool_executor.clone())
-                    .send_with_tools()
-                    .await
-                    .map_err(|e| crate::error::AgentError::ProviderError(e.to_string()))?
-            };
-
-            // Check if there are tool calls
-            let tool_calls = response.tool_calls();
-            if tool_calls.is_none() || tool_calls.map(|t| t.is_empty()).unwrap_or(true) {
-                // No more tool calls, we're done
-                final_content = response.content().map(|s| s.to_string());
-                break;
-            }
-
-            // Add assistant response with tool calls
-            let tool_calls_vec = tool_calls.unwrap();
-            let response_content = response.content().map(|s| s.to_string()).unwrap_or_default();
-            current_messages.push(mofa_sdk::llm::ChatMessage::assistant(response_content));
-
-            // Execute each tool call and add results
-            for tool_call in tool_calls_vec {
-                // Execute tool
-                let result = mofa_sdk::llm::ToolExecutor::execute(
-                    &*tool_executor,
-                    &tool_call.function.name,
-                    &tool_call.function.arguments
-                ).await
-                    .map_err(|e| crate::error::AgentError::ProviderError(format!("Tool execution failed: {}", e)))?;
-
-                // Add tool result message
-                current_messages.push(mofa_sdk::llm::ChatMessage::tool_result(
-                    &tool_call.id,
-                    &result
-                ));
+    fn to_llm_content(content: &crate::types::MessageContent) -> LlmMessageContent {
+        match content {
+            crate::types::MessageContent::Text(text) => LlmMessageContent::Text(text.clone()),
+            crate::types::MessageContent::Array(parts) => {
+                let converted: Vec<ContentPart> = parts
+                    .iter()
+                    .filter_map(|part| serde_json::from_value::<ContentPart>(part.clone()).ok())
+                    .collect();
+                LlmMessageContent::Parts(converted)
             }
         }
-
-        if final_content.is_none() {
-            final_content = Some("I completed the tool calls but have no additional response.".to_string());
-        }
-
-        Ok(final_content)
     }
 
     /// Spawn a subagent for background task processing using mofa's TaskOrchestrator
@@ -404,7 +391,10 @@ impl AgentLoop {
         let origin = TaskOrigin::from_channel(origin_channel, origin_chat_id);
 
         // Spawn using mofa's TaskOrchestrator
-        let task_id = self.task_orchestrator.spawn(prompt, origin).await
+        let task_id = self
+            .task_orchestrator
+            .spawn(prompt, origin)
+            .await
             .map_err(|e| crate::error::AgentError::ProviderError(e.to_string()))?;
 
         // Subscribe to results and forward to message bus
@@ -428,7 +418,8 @@ impl AgentLoop {
                         &origin_channel_clone,
                         &origin_chat_id_clone,
                         result.success,
-                    ).await;
+                    )
+                    .await;
                     break;
                 }
             }
@@ -450,7 +441,11 @@ impl AgentLoop {
         origin_chat_id: &str,
         success: bool,
     ) {
-        let status_text = if success { "completed successfully" } else { "failed" };
+        let status_text = if success {
+            "completed successfully"
+        } else {
+            "failed"
+        };
 
         let announce_content = format!(
             r#"[Subagent '{}' {}]
@@ -479,16 +474,19 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
     /// Get all active subagents from mofa's TaskOrchestrator
     pub async fn get_active_subagents(&self) -> Vec<ActiveSubagent> {
         let mofa_tasks = self.task_orchestrator.get_active_tasks().await;
-        mofa_tasks.into_iter().map(|t| {
-            let parts: Vec<&str> = t.origin.routing_key.split(':').collect();
-            ActiveSubagent {
-                id: t.id,
-                prompt: t.prompt,
-                origin_channel: parts.get(0).unwrap_or(&"").to_string(),
-                origin_chat_id: parts.get(1).unwrap_or(&"").to_string(),
-                started_at: t.started_at,
-            }
-        }).collect()
+        mofa_tasks
+            .into_iter()
+            .map(|t| {
+                let parts: Vec<&str> = t.origin.routing_key.split(':').collect();
+                ActiveSubagent {
+                    id: t.id,
+                    prompt: t.prompt,
+                    origin_channel: parts.get(0).unwrap_or(&"").to_string(),
+                    origin_chat_id: parts.get(1).unwrap_or(&"").to_string(),
+                    started_at: t.started_at,
+                }
+            })
+            .collect()
     }
 
     /// Process a message directly (for CLI usage)
@@ -518,8 +516,14 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 /// Implement the spawn tool's SubagentManager trait directly on AgentLoop
 #[async_trait::async_trait]
 impl crate::tools::spawn::SubagentManager for AgentLoop {
-    async fn spawn(&self, prompt: &str, origin_channel: &str, origin_chat_id: &str) -> Result<String> {
-        self.spawn_subagent(prompt, origin_channel, origin_chat_id).await
+    async fn spawn(
+        &self,
+        prompt: &str,
+        origin_channel: &str,
+        origin_chat_id: &str,
+    ) -> Result<String> {
+        self.spawn_subagent(prompt, origin_channel, origin_chat_id)
+            .await
     }
 }
 
@@ -533,7 +537,10 @@ mod tests {
     #[test]
     fn test_active_subagent_display_label() {
         let label = if "This is a very long prompt that should be truncated".len() > 30 {
-            format!("{}...", &"This is a very long prompt that should be truncated"[..30])
+            format!(
+                "{}...",
+                &"This is a very long prompt that should be truncated"[..30]
+            )
         } else {
             "This is a very long prompt that should be truncated".to_string()
         };

@@ -3,9 +3,9 @@
 //! This module integrates mofa-sdk's PromptContext with mofaclaw-specific
 //! features like skills loading and vision model support.
 
+use crate::Config;
 use crate::error::{AgentError, Result};
 use crate::types::{Message, MessageContent};
-use crate::Config;
 use mofa_sdk::agent::{AgentIdentity, PromptContextBuilder};
 use mofa_sdk::skills::SkillsManager;
 use serde_json::Value;
@@ -82,7 +82,11 @@ impl ContextBuilder {
                     }
                     // Try exe parent/../..skills (for target/debug/mofaclaw -> project/skills)
                     if builtin_skills.is_none() {
-                        if let Some(parent) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+                        if let Some(parent) = exe
+                            .parent()
+                            .and_then(|p| p.parent())
+                            .and_then(|p| p.parent())
+                        {
                             let skills_path = parent.join("skills");
                             if skills_path.exists() {
                                 builtin_skills = Some(skills_path);
@@ -130,13 +134,17 @@ impl ContextBuilder {
         let mut prompt_ctx = PromptContextBuilder::new(&self.workspace)
             .with_identity(identity)
             .with_bootstrap_files(
-                Self::BOOTSTRAP_FILES.iter().map(|s| s.to_string()).collect()
+                Self::BOOTSTRAP_FILES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             )
             .build()
             .await
             .map_err(|e| AgentError::Memory(format!("Failed to build prompt: {}", e)))?;
 
-        let base_prompt = prompt_ctx.build_system_prompt()
+        let base_prompt = prompt_ctx
+            .build_system_prompt()
             .await
             .map_err(|e| AgentError::ContextError(e.to_string()))?;
 
@@ -249,7 +257,8 @@ Read the skill's SKILL.md file using the `read_file` tool to learn how to use it
                         let mime = info.mime_type();
                         if mime.starts_with("image/") {
                             if let Ok(bytes) = fs::read(path_obj) {
-                                let base64_str = base64::engine::general_purpose::STANDARD_NO_PAD.encode(&bytes);
+                                let base64_str =
+                                    base64::engine::general_purpose::STANDARD_NO_PAD.encode(&bytes);
                                 let data_url = format!("data:{};base64,{}", mime, base64_str);
                                 images.push(serde_json::json!({
                                     "type": "image_url",
@@ -298,8 +307,7 @@ Read the skill's SKILL.md file using the `read_file` tool to learn how to use it
                 let name = func.get("name")?.as_str()?;
                 let args_str = func.get("arguments")?.as_str()?;
 
-                let arguments: HashMap<String, Value> =
-                    serde_json::from_str(args_str).ok()?;
+                let arguments: HashMap<String, Value> = serde_json::from_str(args_str).ok()?;
 
                 Some(crate::types::ToolCallRequest {
                     id: id.to_string(),
@@ -309,7 +317,10 @@ Read the skill's SKILL.md file using the `read_file` tool to learn how to use it
             })
             .collect();
 
-        messages.push(Message::assistant(content.map(|s| s.to_string()), tool_calls_parsed));
+        messages.push(Message::assistant(
+            content.map(|s| s.to_string()),
+            tool_calls_parsed,
+        ));
     }
 
     /// Get the workspace path

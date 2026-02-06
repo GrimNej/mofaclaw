@@ -4,9 +4,8 @@
 //! It mirrors the Python config/schema.py structure.
 
 use crate::error::{ConfigError, Result};
-use config::{Config as ConfigLoader, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs;
 
 /// WhatsApp channel configuration
@@ -403,8 +402,7 @@ impl Config {
 
     /// Get Brave Search API key
     pub fn get_brave_api_key(&self) -> Option<String> {
-        (!self.tools.web.search.api_key.is_empty())
-            .then(|| self.tools.web.search.api_key.clone())
+        (!self.tools.web.search.api_key.is_empty()).then(|| self.tools.web.search.api_key.clone())
     }
 
     /// Get Groq transcription API key

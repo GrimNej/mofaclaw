@@ -1,10 +1,9 @@
 //! Shell execution tool
 
 use super::base::{SimpleTool, ToolInput, ToolResult};
-use crate::error::{Result, ToolError};
 use async_trait::async_trait;
 use mofa_sdk::agent::ToolCategory;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::time::Duration;
 use tokio::process::Command;
@@ -118,7 +117,10 @@ impl SimpleTool for ExecTool {
         match result {
             Ok(Ok(output)) => ToolResult::success_text(output),
             Ok(Err(e)) => ToolResult::failure(format!("Error: {}", e)),
-            Err(_) => ToolResult::failure(format!("Error: Command timed out after {} seconds", self.timeout)),
+            Err(_) => ToolResult::failure(format!(
+                "Error: Command timed out after {} seconds",
+                self.timeout
+            )),
         }
     }
 

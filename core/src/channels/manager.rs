@@ -3,7 +3,7 @@
 use super::base::Channel;
 use crate::bus::MessageBus;
 use crate::config::{ChannelsConfig, Config};
-use crate::error::{ChannelError, Result};
+use crate::error::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::spawn;
@@ -14,7 +14,7 @@ use tracing::{error, info};
 #[derive(Clone)]
 pub struct ChannelManager {
     config: ChannelsConfig,
-    bus: MessageBus,
+    _bus: MessageBus,
     channels: Arc<RwLock<Vec<Arc<dyn Channel>>>>,
     running: Arc<RwLock<bool>>,
 }
@@ -27,7 +27,7 @@ impl ChannelManager {
 
         Self {
             config: channels_config,
-            bus,
+            _bus: bus,
             channels,
             running: Arc::new(RwLock::new(false)),
         }

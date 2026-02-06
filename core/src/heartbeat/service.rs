@@ -17,7 +17,11 @@ Follow any instructions or tasks listed there.
 If nothing needs attention, reply with just: HEARTBEAT_OK"#;
 
 /// Callback type for heartbeat
-pub type HeartbeatCallback = Arc<dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>> + Send + Sync>;
+pub type HeartbeatCallback = Arc<
+    dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Service for periodic heartbeat wake-ups
 pub struct HeartbeatService {
@@ -31,10 +35,7 @@ pub struct HeartbeatService {
 
 impl HeartbeatService {
     /// Create a new heartbeat service
-    pub fn new(
-        workspace: PathBuf,
-        interval_s: u64,
-    ) -> Self {
+    pub fn new(workspace: PathBuf, interval_s: u64) -> Self {
         Self {
             workspace,
             on_heartbeat: None,
@@ -81,10 +82,7 @@ impl HeartbeatService {
                 }
 
                 // Execute tick
-                if let Err(e) = Self::tick_internal(
-                    &workspace,
-                    &on_heartbeat
-                ).await {
+                if let Err(e) = Self::tick_internal(&workspace, &on_heartbeat).await {
                     error!("Heartbeat tick failed: {}", e);
                 }
             }
@@ -142,7 +140,11 @@ impl HeartbeatService {
             match callback(HEARTBEAT_PROMPT.to_string()).await {
                 Ok(response) => {
                     // Check if agent said "nothing to do"
-                    if response.to_uppercase().replace('_', "").contains(HEARTBEAT_OK_TOKEN) {
+                    if response
+                        .to_uppercase()
+                        .replace('_', "")
+                        .contains(HEARTBEAT_OK_TOKEN)
+                    {
                         info!("Heartbeat: OK (no action needed)");
                     } else {
                         info!("Heartbeat: completed task");
@@ -204,6 +206,7 @@ fn is_heartbeat_empty(content: Option<&str>) -> bool {
 }
 
 /// Build the heartbeat prompt (legacy, kept for compatibility)
+#[cfg(test)]
 fn build_heartbeat_prompt(workspace: &PathBuf) -> String {
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string();
 
@@ -250,7 +253,9 @@ mod tests {
         assert!(is_heartbeat_empty(Some("# Header\n## Another\n")));
 
         // Only checkboxes
-        assert!(is_heartbeat_empty(Some("- [ ] Task 1\n* [ ] Task 2\n- [x] Done\n* [x] Done too\n")));
+        assert!(is_heartbeat_empty(Some(
+            "- [ ] Task 1\n* [ ] Task 2\n- [x] Done\n* [x] Done too\n"
+        )));
 
         // With HTML comment
         assert!(is_heartbeat_empty(Some("<!-- comment -->\n# Header\n")));
@@ -279,6 +284,9 @@ mod tests {
     #[test]
     fn test_heartbeat_file_path() {
         let service = HeartbeatService::new(PathBuf::from("/tmp/workspace"), 60);
-        assert_eq!(service.heartbeat_file(), PathBuf::from("/tmp/workspace/HEARTBEAT.md"));
+        assert_eq!(
+            service.heartbeat_file(),
+            PathBuf::from("/tmp/workspace/HEARTBEAT.md")
+        );
     }
 }

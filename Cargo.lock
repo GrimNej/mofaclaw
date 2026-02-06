@@ -2604,6 +2604,7 @@ dependencies = [
  "mofa-kernel",
  "mofa-plugins",
  "mofa-runtime",
+ "serde_json",
  "tokio",
  "tracing",
  "uniffi",

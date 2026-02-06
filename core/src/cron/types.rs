@@ -1,8 +1,7 @@
 //! Types for cron scheduling
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Schedule type for a cron job
 #[derive(Debug, Clone, Serialize, Deserialize)]
