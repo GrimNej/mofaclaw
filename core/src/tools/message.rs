@@ -4,7 +4,7 @@ use super::base::{SimpleTool, ToolInput, ToolResult};
 use crate::messages::OutboundMessage;
 use crate::Result;
 use async_trait::async_trait;
-use mofa_sdk::kernel::ToolCategory;
+use mofa_sdk::agent::ToolCategory;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;

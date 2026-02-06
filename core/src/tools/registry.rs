@@ -4,10 +4,8 @@
 //! providing a simplified interface for managing tools.
 
 use crate::error::{Result, ToolError};
-use mofa_sdk::kernel::{
-    SimpleTool, SimpleToolRegistry, as_tool, Tool, ToolInput, ToolResult,
-    ToolRegistry as MofaToolRegistry, CoreAgentContext,
-};
+use mofa_sdk::agent::{as_tool, SimpleTool, SimpleToolRegistry, ToolRegistry as MofaToolRegistry};
+use mofa_sdk::kernel::{AgentContext, Tool, ToolInput};
 use mofa_sdk::llm::Tool as MofaTool;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -79,7 +77,7 @@ impl ToolRegistry {
             .ok_or_else(|| ToolError::NotFound(name.to_string()))?;
 
         let input = ToolInput::from_json(serde_json::json!(params));
-        let ctx = CoreAgentContext::new(format!("tool-execution-{}", name));
+        let ctx = AgentContext::new(format!("tool-execution-{}", name));
 
         let result = mofa_sdk::kernel::Tool::execute(
             tool.as_ref(),

@@ -3,7 +3,7 @@
 use super::base::{SimpleTool, ToolInput, ToolResult};
 use crate::error::{Result, ToolError};
 use async_trait::async_trait;
-use mofa_sdk::kernel::ToolCategory;
+use mofa_sdk::agent::ToolCategory;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::Duration;

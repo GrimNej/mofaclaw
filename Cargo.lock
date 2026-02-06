@@ -2466,7 +2466,6 @@ dependencies = [
 [[package]]
 name = "mofa-extra"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2484,7 +2483,6 @@ dependencies = [
 [[package]]
 name = "mofa-foundation"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -2518,7 +2516,6 @@ dependencies = [
 [[package]]
 name = "mofa-kernel"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2538,7 +2535,6 @@ dependencies = [
 [[package]]
 name = "mofa-plugins"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2577,7 +2573,6 @@ dependencies = [
 [[package]]
 name = "mofa-runtime"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2601,7 +2596,6 @@ dependencies = [
 [[package]]
 name = "mofa-sdk"
 version = "0.1.0"
-source = "git+https://github.com/mofa-org/mofa.git?branch=feature%2Fmofa-rs#a93b7b08b1de028010038baf282a3fd6934b3fcf"
 dependencies = [
  "anyhow",
  "async-trait",

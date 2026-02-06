@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
 
 // Re-export mofa_sdk's Session types
-pub use mofa_sdk::kernel::{
+pub use mofa_sdk::agent::{
     JsonlSessionStorage, MemorySessionStorage, Session,
     SessionManager as MofaSessionManager, SessionMessage,
     SessionStorage,
@@ -297,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_session_ext() {
-        use mofa_sdk::kernel::Session;
+        use mofa_sdk::agent::Session;
 
         let mut session = Session::new("test:ext");
 

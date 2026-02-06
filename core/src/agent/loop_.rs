@@ -23,7 +23,7 @@ use mofa_sdk::llm::{
     LLMAgent, LLMAgentBuilder, Tool, ToolExecutor,
     ChatMessage, task_orchestrator::{TaskOrchestrator, TaskOrigin},
 };
-use mofa_sdk::kernel::ToolRegistry as MofaToolRegistry;
+use mofa_sdk::agent::ToolRegistry as MofaToolRegistry;
 
 /// Information about an active subagent
 #[derive(Debug, Clone)]

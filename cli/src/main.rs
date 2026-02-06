@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mofa_sdk::{SkillsManager, llm::{LLMAgentBuilder}, kernel::ToolRegistry as MofaToolRegistry};
+use mofa_sdk::{skills::SkillsManager, llm::LLMAgentBuilder, agent::ToolRegistry as MofaToolRegistry};
 use tracing::{Level};
 use tracing_subscriber::EnvFilter;
 

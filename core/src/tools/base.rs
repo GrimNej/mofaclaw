@@ -8,10 +8,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 // Re-export mofa-sdk's SimpleTool and related types
-pub use mofa_sdk::kernel::{
-    SimpleTool, SimpleToolAdapter, as_tool,
-    Tool, ToolInput, ToolResult, ToolMetadata,
-};
+pub use mofa_sdk::agent::{SimpleTool, SimpleToolAdapter, as_tool};
+pub use mofa_sdk::kernel::{Tool, ToolInput, ToolResult, ToolMetadata};
 
 /// Definition of a tool's parameters in JSON Schema format
 pub type ToolParameters = Value;

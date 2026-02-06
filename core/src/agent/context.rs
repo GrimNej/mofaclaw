@@ -6,8 +6,8 @@
 use crate::error::{AgentError, Result};
 use crate::types::{Message, MessageContent};
 use crate::Config;
-use mofa_sdk::kernel::{AgentIdentity, PromptContextBuilder};
-use mofa_sdk::SkillsManager;
+use mofa_sdk::agent::{AgentIdentity, PromptContextBuilder};
+use mofa_sdk::skills::SkillsManager;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
