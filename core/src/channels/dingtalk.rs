@@ -48,6 +48,8 @@ os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 websocket_ref = None
 # Store sessionWebhook URLs for each conversation
 session_webhooks = {}
+# Store the event loop for the WebSocket server
+ws_event_loop = None
 
 class MofaclawDingTalkHandler(dingtalk_stream.ChatbotHandler):
     def __init__(self, logger=None):
@@ -65,7 +67,7 @@ class MofaclawDingTalkHandler(dingtalk_stream.ChatbotHandler):
         return logger
 
     async def process(self, callback):
-        global websocket_ref, session_webhooks
+        global websocket_ref, session_webhooks, ws_event_loop
         try:
             # Log the full callback data for debugging
             self.logger.info(f"Received callback data: {callback.data}")
@@ -119,10 +121,19 @@ class MofaclawDingTalkHandler(dingtalk_stream.ChatbotHandler):
             }
 
             # Send to Rust via WebSocket if connected
+            # Use run_coroutine_threadsafe because the callback runs in a different event loop
             if websocket_ref:
                 try:
-                    await websocket_ref.send(json.dumps(message_data))
-                    self.logger.info(f"Forwarded message to Rust: {content[:50]}")
+                    import asyncio
+                    if ws_event_loop and ws_event_loop.is_running():
+                        # Schedule the send coroutine on the WebSocket event loop
+                        asyncio.run_coroutine_threadsafe(
+                            websocket_ref.send(json.dumps(message_data)),
+                            ws_event_loop
+                        )
+                        self.logger.info(f"Forwarded message to Rust: {content[:50]}")
+                    else:
+                        self.logger.warning("WebSocket event loop not available, message not forwarded")
                 except Exception as e:
                     self.logger.error(f"Failed to send message via WebSocket: {e}")
             else:
@@ -158,7 +169,7 @@ def send_message_via_session_webhook(conversation_id, content):
 
 async def handle_websocket(dingtalk_client=None, client_id=None, client_secret=None):
     """Handle incoming WebSocket connection from Rust"""
-    global websocket_ref
+    global websocket_ref, ws_event_loop
     import logging
     logger = logging.getLogger(__name__)
     logging.basicConfig(
@@ -166,6 +177,10 @@ async def handle_websocket(dingtalk_client=None, client_id=None, client_secret=N
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     logger.info("Rust mofaclaw connected")
+
+    # Store the event loop for cross-thread communication
+    ws_event_loop = asyncio.get_running_loop()
+    logger.info(f"WebSocket event loop: {ws_event_loop}")
 
     # Keep connection alive and handle any commands from Rust
     try:
@@ -216,6 +231,7 @@ async def handle_websocket(dingtalk_client=None, client_id=None, client_secret=N
     finally:
         logger.info("WebSocket handler ended")
         websocket_ref = None
+        ws_event_loop = None
 
 def run_dingtalk_client(client_id, client_secret, port=3003):
     """Run the DingTalk Stream client - note: start_forever() creates its own event loop"""
