@@ -36,9 +36,9 @@ base64 = "0.22"
 
 # Telegram
 teloxide = { workspace = true }
-# MoFA framework sdk - using local path for testing
-mofa-sdk = { git = "https://github.com/mofa-org/mofa.git", branch = "feature/mofa-rs" }
-# mofa-sdk = {git = "https://github.com/mofa-org/mofa.git", branch = "feature/mofa-rs"}
+# MoFA framework sdk - local path with latest framework updates
+#mofa-sdk = { path = "/Users/lijing/CodeProjects/mofa/crates/mofa-sdk" }
+mofa-sdk = "0.1.0"
 
 [dev-dependencies]
 tokio-test = "0.4"
