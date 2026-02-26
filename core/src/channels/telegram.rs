@@ -7,11 +7,28 @@ use crate::error::{ChannelError, MofaclawError, Result};
 use crate::messages::{InboundMessage, OutboundMessage};
 use crate::provider::TranscriptionProvider;
 use async_trait::async_trait;
+use regex::Regex;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use teloxide::{net::Download, prelude::*, types::ChatId, types::ParseMode};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+static BOLD1_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+static BOLD2_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
+static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap()
+});
+static LINK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
+static HEADER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap());
+static CODEBLOCK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"```([\s\S]*?)```").unwrap());
+static INLINECODE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
 
 /// Telegram channel using teloxide
 pub struct TelegramChannel {
@@ -53,18 +70,6 @@ impl TelegramChannel {
         self.transcription_provider = Some(provider);
         self
     }
-
-use std::sync::LazyLock;
-use regex::Regex;
-
-static BOLD1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
-static BOLD2_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
-static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap());
-static LINK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
-static HEADER_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap());
-static CODEBLOCK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"```([\s\S]*?)```").unwrap());
-static INLINECODE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
-
     /// Convert markdown to Telegram-safe HTML
     fn markdown_to_html(&self, text: &str) -> String {
         // Simple implementation - escape HTML special characters
