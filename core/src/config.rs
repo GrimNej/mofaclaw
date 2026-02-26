@@ -113,6 +113,32 @@ pub struct FeishuConfig {
     pub bridge_url: Option<String>,
 }
 
+/// Discord channel configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiscordConfig {
+    /// Whether Discord is enabled
+    #[serde(default)]
+    pub enabled: bool,
+    /// Bot token from Discord Developer Portal
+    #[serde(default)]
+    pub token: String,
+    /// Application ID (Bot Application ID)
+    #[serde(default)]
+    pub application_id: u64,
+    /// Guild ID (optional, for guild-specific commands)
+    #[serde(default)]
+    pub guild_id: Option<u64>,
+    /// Allowed users/roles (user IDs or role IDs as strings)
+    #[serde(default)]
+    pub allow_from: Vec<String>,
+    /// Admin role list (role IDs as strings)
+    #[serde(default)]
+    pub admin_roles: Vec<String>,
+    /// Member role list (role IDs as strings, for granular permissions)
+    #[serde(default)]
+    pub member_roles: Vec<String>,
+}
+
 fn default_feishu_message_type() -> String {
     "text".to_string()
 }
@@ -152,6 +178,9 @@ pub struct ChannelsConfig {
     /// Feishu (Lark) configuration
     #[serde(default)]
     pub feishu: FeishuConfig,
+    /// Discord configuration
+    #[serde(default)]
+    pub discord: DiscordConfig,
 }
 
 /// Default agent configuration

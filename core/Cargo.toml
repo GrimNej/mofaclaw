@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-# Workspace dependencies
+# workspace dependencies
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
@@ -34,9 +34,14 @@ tempfile = "3.14"
 infer = "0.15"
 base64 = "0.22"
 
-# Telegram
+# telegram
 teloxide = { workspace = true }
-# MoFA framework sdk - local path with latest framework updates
+
+# discord
+serenity = { workspace = true }
+poise = { workspace = true }
+
+# mofa framework sdk - local path with latest framework updates
 #mofa-sdk = { path = "/Users/lijing/CodeProjects/mofa/crates/mofa-sdk" }
 mofa-sdk = "0.1.0"
 
