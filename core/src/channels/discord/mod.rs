@@ -252,7 +252,9 @@ async fn issue(
             }
             if let Some(n) = number {
                 if let Some(user) = assignee {
-                    format!("assign github issue #{} to user: {}", n, user.name)
+                    // Note: Discord username may differ from GitHub username
+                    // The agent should handle mapping or prompt for GitHub username if needed
+                    format!("assign github issue #{} to github user (discord user: {}). if the discord username doesn't match the github username, use the github username directly or ask for clarification", n, user.name)
                 } else {
                     ctx.say("assignee user required for assign action").await?;
                     return Ok(());
@@ -1689,12 +1691,71 @@ impl Channel for DiscordChannel {
                             }
                         };
 
-                        match channel_id.say(&*http, &msg.content).await {
-                            Ok(_) => {
-                                debug!("sent message to discord channel {}", msg.chat_id);
+                        // Discord has a 2000 character limit per message
+                        // Split long messages into chunks
+                        const MAX_MESSAGE_LENGTH: usize = 1900; // Leave some buffer for formatting
+                        
+                        if msg.content.len() <= MAX_MESSAGE_LENGTH {
+                            // Single message
+                            match channel_id.say(&*http, &msg.content).await {
+                                Ok(_) => {
+                                    debug!("sent message to discord channel {}", msg.chat_id);
+                                }
+                                Err(e) => {
+                                    error!("failed to send message to discord: {}", e);
+                                }
                             }
-                            Err(e) => {
-                                error!("failed to send message to discord: {}", e);
+                        } else {
+                            // Split into chunks
+                            let mut chunks = Vec::new();
+                            let mut remaining = msg.content.as_str();
+                            
+                            while !remaining.is_empty() {
+                                if remaining.len() <= MAX_MESSAGE_LENGTH {
+                                    chunks.push(remaining.to_string());
+                                    break;
+                                }
+                                
+                                // Try to split at a newline for cleaner breaks
+                                let chunk = if let Some(newline_pos) = remaining[..MAX_MESSAGE_LENGTH].rfind('\n') {
+                                    &remaining[..newline_pos]
+                                } else {
+                                    // No newline found, split at max length
+                                    &remaining[..MAX_MESSAGE_LENGTH]
+                                };
+                                
+                                chunks.push(chunk.to_string());
+                                remaining = &remaining[chunk.len()..];
+                                
+                                // Skip newline if we split at one
+                                if remaining.starts_with('\n') {
+                                    remaining = &remaining[1..];
+                                }
+                            }
+                            
+                            // Send chunks sequentially
+                            let total_chunks = chunks.len();
+                            for (i, chunk) in chunks.iter().enumerate() {
+                                let content = if total_chunks > 1 {
+                                    format!("{}\n\n*Part {}/{}*", chunk, i + 1, total_chunks)
+                                } else {
+                                    chunk.clone()
+                                };
+                                
+                                match channel_id.say(&*http, &content).await {
+                                    Ok(_) => {
+                                        debug!("sent message chunk {}/{} to discord channel {}", i + 1, total_chunks, msg.chat_id);
+                                    }
+                                    Err(e) => {
+                                        error!("failed to send message chunk {}/{} to discord: {}", i + 1, total_chunks, e);
+                                        break; // Stop sending remaining chunks on error
+                                    }
+                                }
+                                
+                                // Small delay between chunks to avoid rate limiting
+                                if i < total_chunks - 1 {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                                }
                             }
                         }
                     }
