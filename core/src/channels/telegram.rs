@@ -54,6 +54,17 @@ impl TelegramChannel {
         self
     }
 
+use std::sync::LazyLock;
+use regex::Regex;
+
+static BOLD1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+static BOLD2_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
+static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap());
+static LINK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
+static HEADER_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap());
+static CODEBLOCK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"```([\s\S]*?)```").unwrap());
+static INLINECODE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
+
     /// Convert markdown to Telegram-safe HTML
     fn markdown_to_html(&self, text: &str) -> String {
         // Simple implementation - escape HTML special characters
@@ -66,31 +77,23 @@ impl TelegramChannel {
         result = result.replace('>', "&gt;");
 
         // Bold **text** or __text__
-        let re = regex::Regex::new(r"\*\*([^*]+)\*\*").unwrap();
-        result = re.replace_all(&result, "<b>$1</b>").to_string();
-
-        let re = regex::Regex::new(r"__([^_]+)__").unwrap();
-        result = re.replace_all(&result, "<b>$1</b>").to_string();
+        result = BOLD1_RE.replace_all(&result, "<b>$1</b>").to_string();
+        result = BOLD2_RE.replace_all(&result, "<b>$1</b>").to_string();
 
         // Italic _text_
-        let re = regex::Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap();
-        result = re.replace_all(&result, "<i>$1</i>").to_string();
+        result = ITALIC_RE.replace_all(&result, "<i>$1</i>").to_string();
 
         // Links [text](url)
-        let re = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
-        result = re.replace_all(&result, "<a href=\"$2\">$1</a>").to_string();
+        result = LINK_RE.replace_all(&result, "<a href=\"$2\">$1</a>").to_string();
 
         // Headers # Title -> Title
-        let re = regex::Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap();
-        result = re.replace_all(&result, "$1").to_string();
+        result = HEADER_RE.replace_all(&result, "$1").to_string();
 
         // Code blocks
-        let re = regex::Regex::new(r"```([\s\S]*?)```").unwrap();
-        result = re.replace_all(&result, "<pre>$1</pre>").to_string();
+        result = CODEBLOCK_RE.replace_all(&result, "<pre>$1</pre>").to_string();
 
         // Inline code
-        let re = regex::Regex::new(r"`([^`]+)`").unwrap();
-        result = re.replace_all(&result, "<code>$1</code>").to_string();
+        result = INLINECODE_RE.replace_all(&result, "<code>$1</code>").to_string();
 
         result
     }
