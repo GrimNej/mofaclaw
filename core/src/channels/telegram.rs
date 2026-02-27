@@ -14,21 +14,15 @@ use teloxide::{net::Download, prelude::*, types::ChatId, types::ParseMode};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-static BOLD1_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
-static BOLD2_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
-static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap()
-});
-static LINK_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
-static HEADER_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap());
-static CODEBLOCK_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"```([\s\S]*?)```").unwrap());
-static INLINECODE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
+static BOLD1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+static BOLD2_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
+// Use word boundaries around _text_ to approximate the original intent
+// without using unsupported look-around in Rust's regex engine.
+static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\\b_([^_]+)_\\b").unwrap());
+static LINK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
+static HEADER_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap());
+static CODEBLOCK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"```([\s\S]*?)```").unwrap());
+static INLINECODE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").unwrap());
 
 /// Telegram channel using teloxide
 pub struct TelegramChannel {
@@ -87,16 +81,22 @@ impl TelegramChannel {
         result = ITALIC_RE.replace_all(&result, "<i>$1</i>").to_string();
 
         // links [text](url)
-        result = LINK_RE.replace_all(&result, "<a href=\"$2\">$1</a>").to_string();
+        result = LINK_RE
+            .replace_all(&result, "<a href=\"$2\">$1</a>")
+            .to_string();
 
         // headers # title -> title
         result = HEADER_RE.replace_all(&result, "$1").to_string();
 
         // code blocks
-        result = CODEBLOCK_RE.replace_all(&result, "<pre>$1</pre>").to_string();
+        result = CODEBLOCK_RE
+            .replace_all(&result, "<pre>$1</pre>")
+            .to_string();
 
         // inline code
-        result = INLINECODE_RE.replace_all(&result, "<code>$1</code>").to_string();
+        result = INLINECODE_RE
+            .replace_all(&result, "<code>$1</code>")
+            .to_string();
 
         result
     }

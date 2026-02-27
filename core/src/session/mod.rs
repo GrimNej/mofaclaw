@@ -262,7 +262,7 @@ impl SessionExt for Session {
     }
 
     fn add_message_from(&mut self, message: &Message) {
-        let session_msgs = messages_to_session_messages(&[message.clone()]);
+        let session_msgs = messages_to_session_messages(std::slice::from_ref(message));
         if let Some(msg) = session_msgs.first() {
             self.messages.push(msg.clone());
             self.updated_at = Utc::now();

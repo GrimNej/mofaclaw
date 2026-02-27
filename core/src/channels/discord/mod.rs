@@ -113,14 +113,12 @@ impl DiscordChannel {
 
     /// check if user has admin role
     fn is_admin(&self, roles: &[String]) -> bool {
-        self.permissions
-            .has_level(roles, PermissionLevel::Admin)
+        self.permissions.has_level(roles, PermissionLevel::Admin)
     }
 
     /// check if user has member role (or admin role)
     fn is_member(&self, roles: &[String]) -> bool {
-        self.permissions
-            .has_level(roles, PermissionLevel::Member)
+        self.permissions.has_level(roles, PermissionLevel::Member)
     }
 
     /// check if user is guest (anyone can be a guest, but not restricted)
@@ -1238,6 +1236,63 @@ fn extract_number(text: &str) -> Option<u32> {
     None
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_match_workspace_soul() {
+        let intent = match_command_keywords("show workspace soul file");
+        match intent {
+            CommandIntent::Workspace(WorkspaceIntent::ViewFile(WorkspaceFile::Soul)) => {}
+            _ => panic!("unexpected intent for workspace soul"),
+        }
+    }
+
+    #[test]
+    fn test_match_issue_create_with_title() {
+        let intent = match_command_keywords("please create issue login bug");
+        match intent {
+            CommandIntent::Issue(s) => {
+                assert_eq!(s, "create a github issue with title: login bug");
+            }
+            _ => panic!("expected issue intent"),
+        }
+    }
+
+    #[test]
+    fn test_match_pr_list_with_state() {
+        let intent = match_command_keywords("can you list pr open");
+        match intent {
+            CommandIntent::Pr(s) => {
+                assert_eq!(s, "list all github prs with state: open");
+            }
+            _ => panic!("expected pr intent"),
+        }
+    }
+
+    #[test]
+    fn test_match_weather_location() {
+        let intent = match_command_keywords("what's the weather in New York");
+        match intent {
+            CommandIntent::Weather(s) => {
+                assert!(s.contains("weather for new york"));
+            }
+            _ => panic!("expected weather intent"),
+        }
+    }
+
+    #[test]
+    fn test_extract_number_from_hash() {
+        assert_eq!(extract_number("please check issue #123"), Some(123));
+    }
+
+    #[test]
+    fn test_extract_number_from_standalone() {
+        assert_eq!(extract_number("view pr 42 please"), Some(42));
+    }
+}
+
 /// execute workspace view file (for natural language)
 async fn execute_workspace_view(
     http: &serenity::Http,
@@ -1686,14 +1741,15 @@ impl Channel for DiscordChannel {
                     Vec::new()
                 };
 
-                let channel = DiscordChannel::new(self.config.clone(), self.bus.clone())
-                    .unwrap_or(DiscordChannel {
+                let channel = DiscordChannel::new(self.config.clone(), self.bus.clone()).unwrap_or(
+                    DiscordChannel {
                         config: self.config.clone(),
                         bus: self.bus.clone(),
                         running: Arc::new(RwLock::new(true)),
                         http: Arc::new(RwLock::new(None)),
                         permissions: PermissionManager::from_discord_config(&self.config),
-                    });
+                    },
+                );
 
                 if !channel.is_allowed(&user_id, &roles) {
                     debug!("message from unauthorized user: {}", user_id);

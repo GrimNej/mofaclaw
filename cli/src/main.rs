@@ -5,9 +5,12 @@ use clap::{Parser, Subcommand};
 use console::Style;
 use mofa_sdk::{llm::LLMAgentBuilder, skills::SkillsManager};
 use mofaclaw_core::{
-    channels::DiscordChannel, AgentLoop, ChannelManager, Config, ContextBuilder, DingTalkChannel,
-    FeishuChannel, HeartbeatService, MessageBus, SessionManager, SubagentManager, TelegramChannel,
-    load_config, provider::{OpenAIConfig, OpenAIProvider}, save_config,
+    AgentLoop, ChannelManager, Config, ContextBuilder, DingTalkChannel, FeishuChannel,
+    HeartbeatService, MessageBus, SessionManager, SubagentManager, TelegramChannel,
+    channels::DiscordChannel,
+    load_config,
+    provider::{OpenAIConfig, OpenAIProvider},
+    save_config,
     tools::{ToolRegistry, ToolRegistryExecutor},
 };
 use std::io::Write;

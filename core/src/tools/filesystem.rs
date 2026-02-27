@@ -16,6 +16,12 @@ impl ReadFileTool {
     }
 }
 
+impl Default for ReadFileTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl SimpleTool for ReadFileTool {
     fn name(&self) -> &str {
@@ -79,6 +85,12 @@ impl WriteFileTool {
     }
 }
 
+impl Default for WriteFileTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl SimpleTool for WriteFileTool {
     fn name(&self) -> &str {
@@ -120,10 +132,10 @@ impl SimpleTool for WriteFileTool {
         let path = expand_tilde(Path::new(path));
 
         // Create parent directories
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent).await {
-                return ToolResult::failure(format!("Error creating directory: {}", e).to_string());
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent).await
+        {
+            return ToolResult::failure(format!("Error creating directory: {}", e).to_string());
         }
 
         match fs::write(&path, content).await {
@@ -147,6 +159,12 @@ pub struct EditFileTool;
 impl EditFileTool {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for EditFileTool {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -244,6 +262,12 @@ impl ListDirTool {
     }
 }
 
+impl Default for ListDirTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl SimpleTool for ListDirTool {
     fn name(&self) -> &str {
@@ -307,7 +331,7 @@ impl SimpleTool for ListDirTool {
                 None => break,
             };
             let name = entry.file_name().to_string_lossy().to_string();
-            
+
             // Fast path: use DirEntry::file_type which doesn't require an extra stat call on most platforms
             let is_dir = if let Ok(file_type) = entry.file_type().await {
                 file_type.is_dir()
@@ -319,11 +343,7 @@ impl SimpleTool for ListDirTool {
                     .unwrap_or(false)
             };
 
-            let prefix = if is_dir {
-                "📁 "
-            } else {
-                "📄 "
-            };
+            let prefix = if is_dir { "📁 " } else { "📄 " };
             items.push(format!("{}{}", prefix, name));
         }
 
@@ -346,10 +366,10 @@ fn expand_tilde(path: &Path) -> PathBuf {
         if let Some(home) = dirs::home_dir() {
             return home.join(&path.as_os_str().to_string_lossy()[2..]);
         }
-    } else if path == Path::new("~") {
-        if let Some(home) = dirs::home_dir() {
-            return home;
-        }
+    } else if path == Path::new("~")
+        && let Some(home) = dirs::home_dir()
+    {
+        return home;
     }
     path.to_path_buf()
 }

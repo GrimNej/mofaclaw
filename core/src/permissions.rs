@@ -94,10 +94,7 @@ mod tests {
     #[test]
     fn level_for_member_role_is_member() {
         let mgr = PermissionManager::new(vec!["admin".into()], vec!["member".into()]);
-        assert_eq!(
-            mgr.level_for(&roles(&["member"])),
-            PermissionLevel::Member
-        );
+        assert_eq!(mgr.level_for(&roles(&["member"])), PermissionLevel::Member);
     }
 
     #[test]
@@ -139,5 +136,3 @@ mod tests {
         assert!(mgr.check_permission(&admin, PermissionLevel::Admin));
     }
 }
-
-
