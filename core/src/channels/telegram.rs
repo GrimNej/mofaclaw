@@ -18,9 +18,10 @@ static BOLD1_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
 static BOLD2_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
-static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])").unwrap()
-});
+// Use word boundaries around _text_ to approximate the original intent
+// without using unsupported look-around in Rust's regex engine.
+static ITALIC_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\\b_([^_]+)_\\b").unwrap());
 static LINK_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
 static HEADER_RE: LazyLock<Regex> =
