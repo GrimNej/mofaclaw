@@ -113,7 +113,10 @@ mod tests {
         assert!(matcher.is_whitelisted(&path, &["${workspace}/**".to_string()]));
         assert!(!matcher.is_whitelisted(&path, &["/other/**".to_string()]));
 
-        assert!(!matcher.is_blacklisted(&path, &["${workspace}/**".to_string()]));
+        // If a path matches a blacklist pattern, it should be blacklisted
+        assert!(matcher.is_blacklisted(&path, &["${workspace}/**".to_string()]));
         assert!(matcher.is_blacklisted(&path, &["**/*.txt".to_string()]));
+        // Path that doesn't match blacklist should not be blacklisted
+        assert!(!matcher.is_blacklisted(&path, &["/other/**".to_string()]));
     }
 }

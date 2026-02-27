@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// RBAC configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RbacConfig {
     /// Whether RBAC is enabled
     #[serde(default)]
@@ -22,6 +22,18 @@ pub struct RbacConfig {
     /// Permission definitions
     #[serde(default)]
     pub permissions: PermissionConfig,
+}
+
+impl Default for RbacConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_role: default_role(),
+            roles: HashMap::new(),
+            role_mappings: HashMap::new(),
+            permissions: PermissionConfig::default(),
+        }
+    }
 }
 
 fn default_role() -> String {
