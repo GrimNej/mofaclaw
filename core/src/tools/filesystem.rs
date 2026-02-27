@@ -331,7 +331,7 @@ impl SimpleTool for ListDirTool {
                 None => break,
             };
             let name = entry.file_name().to_string_lossy().to_string();
-            
+
             // Fast path: use DirEntry::file_type which doesn't require an extra stat call on most platforms
             let is_dir = if let Ok(file_type) = entry.file_type().await {
                 file_type.is_dir()
@@ -343,11 +343,7 @@ impl SimpleTool for ListDirTool {
                     .unwrap_or(false)
             };
 
-            let prefix = if is_dir {
-                "📁 "
-            } else {
-                "📄 "
-            };
+            let prefix = if is_dir { "📁 " } else { "📄 " };
             items.push(format!("{}{}", prefix, name));
         }
 

@@ -303,24 +303,32 @@ impl SimpleTool for WebFetchTool {
 
 use std::sync::LazyLock;
 
-static LINK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"<a\s+[^>]*href=["']([^"']+)["'][^>]*>([^<]+)</a>"#).unwrap());
+static LINK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"<a\s+[^>]*href=["']([^"']+)["'][^>]*>([^<]+)</a>"#).unwrap());
 // NOTE: Rust's regex crate does not support backreferences like \1.
 // The original pattern used </h\1>, which caused a runtime regex parse error and
 // crashed the bot at startup. We instead explicitly match any closing h[1-6] tag.
 // We still use the captured opening level (group 1) to decide how many '#' to emit.
 static HEADING_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"<h([1-6])[^>]*>([^<]+)</h[1-6]>").unwrap());
-static BOLD1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<strong[^>]*>([^<]+)</strong>").unwrap());
+static BOLD1_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<strong[^>]*>([^<]+)</strong>").unwrap());
 static BOLD2_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<b[^>]*>([^<]+)</b>").unwrap());
-static ITALIC1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<em[^>]*>([^<]+)</em>").unwrap());
+static ITALIC1_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<em[^>]*>([^<]+)</em>").unwrap());
 static ITALIC2_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<i[^>]*>([^<]+)</i>").unwrap());
-static CODEBLOCK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<pre[^>]*><code[^>]*>([\s\S]+?)</code></pre>").unwrap());
-static INLINECODE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<code[^>]*>([^<]+)</code>").unwrap());
+static CODEBLOCK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<pre[^>]*><code[^>]*>([\s\S]+?)</code></pre>").unwrap());
+static INLINECODE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<code[^>]*>([^<]+)</code>").unwrap());
 static LIST_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<li[^>]*>([^<]+)</li>").unwrap());
-static PARAGRAPH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"</(p|div|section|article)>").unwrap());
+static PARAGRAPH_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"</(p|div|section|article)>").unwrap());
 static BREAK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<br\s*/?>").unwrap());
-static SCRIPT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<script[\s\S]*?</script>").unwrap());
-static STYLE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<style[\s\S]*?</style>").unwrap());
+static SCRIPT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<script[\s\S]*?</script>").unwrap());
+static STYLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<style[\s\S]*?</style>").unwrap());
 static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]+>").unwrap());
 static WS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[ \t]+").unwrap());
 static NEWLINES_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
@@ -350,7 +358,9 @@ fn html_to_markdown(html: &str) -> String {
     result = ITALIC2_RE.replace_all(&result, "_$1_").to_string();
 
     // Convert code blocks
-    result = CODEBLOCK_RE.replace_all(&result, "```\n$1\n```").to_string();
+    result = CODEBLOCK_RE
+        .replace_all(&result, "```\n$1\n```")
+        .to_string();
 
     // Convert inline code
     result = INLINECODE_RE.replace_all(&result, "`$1`").to_string();

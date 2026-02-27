@@ -113,14 +113,12 @@ impl DiscordChannel {
 
     /// check if user has admin role
     fn is_admin(&self, roles: &[String]) -> bool {
-        self.permissions
-            .has_level(roles, PermissionLevel::Admin)
+        self.permissions.has_level(roles, PermissionLevel::Admin)
     }
 
     /// check if user has member role (or admin role)
     fn is_member(&self, roles: &[String]) -> bool {
-        self.permissions
-            .has_level(roles, PermissionLevel::Member)
+        self.permissions.has_level(roles, PermissionLevel::Member)
     }
 
     /// check if user is guest (anyone can be a guest, but not restricted)
@@ -1743,14 +1741,15 @@ impl Channel for DiscordChannel {
                     Vec::new()
                 };
 
-                let channel = DiscordChannel::new(self.config.clone(), self.bus.clone())
-                    .unwrap_or(DiscordChannel {
+                let channel = DiscordChannel::new(self.config.clone(), self.bus.clone()).unwrap_or(
+                    DiscordChannel {
                         config: self.config.clone(),
                         bus: self.bus.clone(),
                         running: Arc::new(RwLock::new(true)),
                         http: Arc::new(RwLock::new(None)),
                         permissions: PermissionManager::from_discord_config(&self.config),
-                    });
+                    },
+                );
 
                 if !channel.is_allowed(&user_id, &roles) {
                     debug!("message from unauthorized user: {}", user_id);
