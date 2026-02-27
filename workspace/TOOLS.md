@@ -36,6 +36,18 @@ Execute a shell command and return output.
 exec(command: str, working_dir: str = None) -> str
 ```
 
+**When to use:**
+- User asks to run a command (e.g., "curl ipinfo", "ls -la", "git status")
+- User mentions a shell command directly (e.g., "run curl ipinfo.io")
+- User wants to check system information (e.g., "check my ip", "show disk usage")
+- User wants to interact with git, docker, or other CLI tools
+
+**Examples:**
+- User says "curl ipinfo" → use `exec(command="curl ipinfo.io")`
+- User says "what's my ip" → use `exec(command="curl ipinfo.io")`
+- User says "list files" → use `exec(command="ls -la")`
+- User says "git status" → use `exec(command="git status")`
+
 **Safety Notes:**
 - Commands have a 60-second timeout
 - Output is truncated at 10,000 characters

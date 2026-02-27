@@ -68,8 +68,6 @@ If breaking:
 
 ### Code Quality
 - [ ] Code follows Rust idioms and project conventions
-- [ ] `cargo fmt` run
-- [ ] `cargo clippy` passes without warnings
 
 ### Testing
 - [ ] Tests added/updated

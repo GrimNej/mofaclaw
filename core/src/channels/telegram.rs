@@ -71,34 +71,32 @@ impl TelegramChannel {
         self.transcription_provider = Some(provider);
         self
     }
-    /// Convert markdown to Telegram-safe HTML
+    /// convert markdown to telegram-safe html
     fn markdown_to_html(&self, text: &str) -> String {
-        // Simple implementation - escape HTML special characters
-        // In a full implementation, this would do proper markdown conversion
         let mut result = text.to_string();
 
-        // Escape HTML
+        // escape html
         result = result.replace('&', "&amp;");
         result = result.replace('<', "&lt;");
         result = result.replace('>', "&gt;");
 
-        // Bold **text** or __text__
+        // bold **text** or __text__
         result = BOLD1_RE.replace_all(&result, "<b>$1</b>").to_string();
         result = BOLD2_RE.replace_all(&result, "<b>$1</b>").to_string();
 
-        // Italic _text_
+        // italic _text_
         result = ITALIC_RE.replace_all(&result, "<i>$1</i>").to_string();
 
-        // Links [text](url)
+        // links [text](url)
         result = LINK_RE.replace_all(&result, "<a href=\"$2\">$1</a>").to_string();
 
-        // Headers # Title -> Title
+        // headers # title -> title
         result = HEADER_RE.replace_all(&result, "$1").to_string();
 
-        // Code blocks
+        // code blocks
         result = CODEBLOCK_RE.replace_all(&result, "<pre>$1</pre>").to_string();
 
-        // Inline code
+        // inline code
         result = INLINECODE_RE.replace_all(&result, "<code>$1</code>").to_string();
 
         result
