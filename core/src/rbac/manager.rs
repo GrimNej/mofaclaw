@@ -273,22 +273,6 @@ impl RbacManager {
                 ));
             }
 
-            // Prevent command injection via shell metacharacters.
-            // Includes Unix operators, Windows-specific chars (%,!,^), and
-            // newline/CR to block CRLF injection through env-var expansion.
-            // NOTE: Check once here to avoid log spam in the loop below.
-            const SHELL_METACHARS: &[char] = &[
-                ';', '&', '|', '`', '$', '<', '>', '(', ')', '{', '}', '\n',
-                '\r', // newline injection
-                '%', '!', '^', // Windows: %VAR%, delayed expansion, escape char
-            ];
-            if command.chars().any(|c| SHELL_METACHARS.contains(&c)) {
-                warn!("Command rejected: contained disallowed shell metacharacters");
-                return PermissionResult::Denied(
-                    "Command contained disallowed shell metacharacters".to_string(),
-                );
-            }
-
             // Check if command matches any allowed pattern
             for pattern in &op_perm.allowed {
                 if self.matches_command_pattern(command, pattern) {
@@ -308,6 +292,19 @@ impl RbacManager {
 
     /// Check if command matches a pattern (supports wildcards)
     fn matches_command_pattern(&self, command: &str, pattern: &str) -> bool {
+        // ── 0. Prevent command injection via shell metacharacters ─────────
+        // We block sequences like '&&', ';', '|' here so that even wildcard
+        // patterns don't accidentally match and permit chained malicious execution.
+        const SHELL_METACHARS: &[char] = &[
+            ';', '&', '|', '`', '$', '<', '>', '(', ')', '{', '}', '\n',
+            '\r', // newline injection
+            '%', '!', '^', // Windows: %VAR%, delayed expansion, escape char
+        ];
+        if command.chars().any(|c| SHELL_METACHARS.contains(&c)) {
+            warn!("Command rejected: contained disallowed shell metacharacters");
+            return false;
+        }
+
         // ── 1. Token match with shell-words ───────────────────────────────
         // Both pattern and command are tokenized via shell_words (POSIX quoting).
         // This ensures the authorization check precisely mirrors execution argv parsing.
