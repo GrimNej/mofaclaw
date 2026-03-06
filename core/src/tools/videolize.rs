@@ -82,6 +82,10 @@ impl SimpleTool for VideolizeTool {
                     "type": "string",
                     "description": "Series or movie name (e.g. Breaking Bad)"
                 },
+                "script": {
+                    "type": "string",
+                    "description": "Optional pre-generated narration script. If provided, videolizer will skip content generation."
+                },
                 "style_preset": {
                     "type": "string",
                     "description": "Optional style preset (e.g. calm, energetic)"
@@ -100,6 +104,7 @@ impl SimpleTool for VideolizeTool {
             Some(s) => s.to_string(),
             None => return ToolResult::failure("Missing 'series' parameter"),
         };
+        let script = input.get_str("script").map(|s| s.to_string());
 
         let job_id = format!(
             "vid_{}_{}",
@@ -116,6 +121,7 @@ impl SimpleTool for VideolizeTool {
             "job_id": job_id,
             "character": character,
             "series": series,
+            "script": script,
             "format": "video_short",
             "output": { "width": 1080, "height": 1920, "fps": 24 }
         });
