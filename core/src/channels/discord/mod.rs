@@ -643,7 +643,7 @@ async fn status(
     #[description = "run id (for run_view / watch)"] run_id: Option<String>,
     #[description = "pr number (for checks)"] pr_number: Option<u32>,
     #[description = "workflow name filter (for run_list)"] workflow: Option<String>,
-    #[description = "max results for run_list (default 10)"] limit: Option<u32>,
+    #[description = "max runs (default 10, max 50)"] limit: Option<u32>,
 ) -> std::result::Result<(), DiscordError> {
     // show typing indicator
     let _ = ctx.channel_id().start_typing(&ctx.serenity_context().http);
